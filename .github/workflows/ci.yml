@@ -1,0 +1,217 @@
+name: CI
+
+# pushは更新先、pull_requestはマージ先がmain/developの場合に起動する。
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# チェックアウトに必要な読み取り権限だけを付与する。
+permissions:
+  contents: read
+
+# runステップは原則frontendで実行する。ルートやbackendを使うジョブは上書きする。
+# usesステップのファイル指定（例: cache-dependency-path）はリポジトリルート基準。
+defaults:
+  run:
+    working-directory: frontend
+
+# qualityとdetectは並列実行し、detectの結果でe2e/backendを有効にする。
+# integrationは必要な実装が揃い、先行する検証が成功した場合に実行する。
+jobs:
+  # 現在のフロントエンドを常に検証する、CIの基本ジョブ。
+  quality:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # セキュリティ修正版24.22.1を下限とし、24系の最新リリースを取得する。
+          node-version: '>=24.22.1 <25'
+          check-latest: true
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # lockfileどおりに依存を復元し、型検査と本番ビルドの両方を確認する。
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  # E2E導入時は frontend/package.json に e2e スクリプトを追加する。
+  # ブラウザーなどの準備が必要なら、このジョブにセットアップを追加する。
+  e2e:
+    name: Frontend E2E
+    needs: detect
+    if: needs.detect.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # qualityと同じNode.jsのバージョン条件を使う。
+          node-version: '>=24.22.1 <25'
+          check-latest: true
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run e2e
+
+  # 段階的な実装に対応するため、任意ジョブの実行条件を一か所で判定する。
+  # ファイルやスクリプトの存在確認のみを行い、実際の検証は各ジョブに任せる。
+  detect:
+    name: Detect implementation
+    runs-on: ubuntu-latest
+
+    # workflow全体のfrontend指定を上書き
+    defaults:
+      run:
+        working-directory: .
+
+    # GitHub Actionsのジョブ出力は文字列なので、利用側では'true'と比較する。
+    outputs:
+      e2e: ${{ steps.check.outputs.e2e }}
+      backend: ${{ steps.check.outputs.backend }}
+      integration: ${{ steps.check.outputs.integration }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required files
+        id: check
+        shell: bash
+        run: |
+          backend=false
+
+          # GoモジュールとAPIエントリーポイントが揃ったらGo検証を有効にする。
+          if [[ -f backend/go.mod &&
+                -f backend/cmd/api/main.go ]]; then
+            backend=true
+          fi
+
+          # Goの実装があることを前提にする
+          integration="$backend"
+
+          # 結合テストにはGo実装に加えて、Compose・イメージ定義・確認スクリプトが必要。
+          # 今後ファイル構成を変える場合は、この一覧と実行ステップを合わせて更新する。
+          required_files=(
+            "compose.yaml"
+            "frontend/Dockerfile"
+            "backend/Dockerfile"
+            "scripts/init.sh"
+            "scripts/smoke.py"
+            "scripts/tapyrus-smoke.py"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              echo "Integration not ready: $file is missing"
+              integration=false
+            fi
+          done
+
+          # このステップの出力を、上記outputs経由で後続ジョブへ渡す。
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "integration=$integration" >> "$GITHUB_OUTPUT"
+          # 未導入のE2Eはスキップし、導入後はスクリプトの失敗を検出する。
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          package = json.loads(Path("frontend/package.json").read_text())
+          enabled = bool(package.get("scripts", {}).get("e2e"))
+          print(f"e2e={str(enabled).lower()}")
+          PY
+
+  # Go実装の導入後に自動で有効になる。未導入の間はジョブ全体をスキップする。
+  backend:
+    name: Go checks
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v4
+        with:
+          # Goのバージョンと依存キャッシュはバックエンド側の定義に合わせる。
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - run: go mod download
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+
+      # 静的解析、競合検出付きテスト、APIバイナリのビルドを順に確認する。
+      # -count=1でテストキャッシュを使わず、その実行での結果を得る。
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - run: go build ./cmd/api
+
+  # Compose上でサービス間接続とTapyrusトランザクションを確認する。
+  integration:
+    name: Integration checks
+
+    # E2E未導入によるスキップは許可し、実行した検証の失敗は許可しない。
+    needs: [detect, quality, e2e, backend]
+
+    # !cancelled()により、依存ジョブのスキップでこの条件自体が省略されるのを防ぐ。
+    # quality/backendの成功と結合用ファイルの存在を必須にし、E2Eのみ未導入を許容する。
+    if: >-
+      ${{ !cancelled() &&
+          needs.detect.result == 'success' &&
+          needs.detect.outputs.integration == 'true' &&
+          needs.quality.result == 'success' &&
+          needs.backend.result == 'success' &&
+          (needs.e2e.result == 'success' || needs.e2e.result == 'skipped') }}
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Compose起動前にローカルTapyrus環境を初期化する。
+      - name: Initialize local Tapyrus
+        run: bash scripts/init.sh
+
+      - name: Validate Compose
+        run: docker compose config --quiet
+
+      # 起動完了を最大180秒待つ。サービスの準備状態はComposeのhealthcheckで定義する。
+      - name: Build and start services
+        run: docker compose up --build --wait --wait-timeout 180
+
+      - name: Check application connections
+        run: python3 scripts/smoke.py
+
+      - name: Check Tapyrus transaction
+        run: python3 scripts/tapyrus-smoke.py
+
+      # 失敗時は原因調査用のログを残し、後片付けは成功・失敗にかかわらず試みる。
+      - name: Show logs
+        if: failure()
+        run: docker compose logs --no-color --tail=100
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down --volumes --remove-orphans
