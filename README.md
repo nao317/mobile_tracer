@@ -1,74 +1,238 @@
 # mobile tracer
 
-## プロジェクトの概要
+## 構成と設計方針
 
-現在は、React Router・React・TypeScriptを使ったフロントエンドの開発環境と、GitHub ActionsによるCIを整備しています。フロントエンドのコードは `frontend/` にあります。
+React Router、Go、PostgreSQL、Tapyrus APIをそれぞれDockerコンテナで動かし、NginxでHTTPリクエストの振り分けをまとめて管理する構成を採用します。開発環境ではDocker Composeで各サービスを起動する方針です。
 
-CIには、今後の実装に向けてGo製APIの検証と、Tapyrusを含む結合テストの実行手順も用意しています。Goの検証ジョブと結合テストのジョブは、それぞれに必要なファイルが揃うと実行されます。CIから読み取れる構成は次のとおりです。
+現在はフロントエンドの開発環境とCIを整備しています。以下には、今後導入する技術と設計方針を記載します。
 
-| 構成要素 | 役割・現在の状態 |
+### 技術構成図
+
+各ノードを独立したコンテナとして管理します。Go APIの2台目は、負荷テスト後に必要に応じて追加する構成です。点線は追加予定の接続を表します。
+
+```mermaid
+flowchart TB
+    browser["ブラウザー"]
+    subgraph compose["Docker Composeで管理する構成（導入予定）"]
+        nginx["Nginx<br/>HTTPリクエストの転送・負荷分散"]
+        frontend["React Router・React・TypeScript<br/>入力検証: Zod"]
+        api1["Go API<br/>Echo・GORM・goroutine"]
+        api2["Go API 2台目<br/>必要に応じて追加"]
+        db[("PostgreSQL")]
+        tapyrus["Tapyrus API"]
+
+        nginx -->|画面| frontend
+        nginx -->|/api| api1
+        nginx -.->|/apiの負荷分散| api2
+        frontend -->|サーバー側からのAPI呼び出し| api1
+        api1 -->|業務データ・処理状況| db
+        api1 -->|Tapyrus連携| tapyrus
+        api2 -.-> db
+        api2 -.-> tapyrus
+    end
+    browser -->|HTTPリクエスト| nginx
+```
+
+ESLint・Vitest・Playwrightは開発・テスト時に使用し、常駐するサービスのコンテナとは分けて扱います。React Routerのサーバー側からGo APIへの接続も、Go APIの複数台構成を導入する際に振り分け方法を検討します。
+
+Nginxで外部からのHTTPリクエストを受け付け、画面のリクエストはReact Routerへ、APIのリクエストはGoへ転送する想定です。React Routerのサーバー側からAPIを呼ぶ場合は、内部ネットワークでGoへ接続します。PostgreSQLとTapyrus APIへの接続はGoに集約します。NginxはHTTP通信を管理し、コンテナの起動・停止や接続設定はComposeで管理します。
+
+最初は、業務処理をひとつのGoアプリケーションにまとめる簡素な構成にします。コードはHTTPの受付、業務処理、DB・Tapyrus APIへの接続という責務で分け、機能ごとのサービス分割や独自のロードバランサーは導入しない方針です。
+
+### 技術の役割と選定理由
+
+| 技術 | 役割・選定理由 |
 | --- | --- |
-| フロントエンド | React Router・React・TypeScriptを使用。型チェックと本番ビルドをCIで検証します。 |
-| バックエンド | Go製APIを導入する予定です。`backend/go.mod` と `backend/cmd/api/main.go` は未導入です。 |
-| E2Eテスト | 未導入です。`frontend/package.json` に `e2e` スクリプトを追加するとCIの対象になります。テストツールに応じた準備も必要です。 |
-| 結合テスト | Docker Composeでサービスを起動し、接続とTapyrusのトランザクションを確認する予定です。必要なCompose定義やスクリプトは未導入です。 |
+| React Router・React・TypeScript | 画面、ルーティング、画面に必要なデータ取得をまとめます。既存のフロントエンドを活用し、画面側の構成を揃えます。 |
+| ESLint | コードを静的に検査します。問題のある書き方を、テストやレビューの前に検出するために採用します。 |
+| Vitest | 関数や画面の部品など、小さな単位のテストを担当します。既存のViteを使った開発環境と設定を合わせやすいため採用します。 |
+| Zod | フォーム入力やAPIレスポンスなど、実行時に受け取るデータを検証します。TypeScriptの型だけでは確認できない入力を扱うために採用します。 |
+| Playwright | ブラウザーで画面を操作し、主要な利用手順をE2Eテストで確認します。画面とAPIをつないだ動作を検証するために採用します。 |
+| Go・Echo | Goで業務APIを実装し、Echoでルーティングや共通のHTTP処理をまとめます。APIの基本処理を簡潔に記述するために採用します。 |
+| GORM | GoからPostgreSQLを操作します。定型的なDBアクセスをまとめ、業務処理を読みやすく保つために採用します。 |
+| goroutine | Go内で処理を並行して実行する言語機能です。独立した処理を並行させる場合に利用し、同時実行数は制御します。 |
+| PostgreSQL | 業務データと処理状況を保存します。トランザクションや制約を使ってデータの整合性を管理するために採用します。 |
+| Tapyrus API | Tapyrusとの連携を担当します。ブロックチェーンへの操作をGoの業務処理から分離するために採用します。利用するAPI実装、必要なノード、接続仕様は導入時に確認します。 |
+| Docker・Docker Compose | サービスごとに実行環境を分け、開発・結合テストで同じ構成を起動できるようにします。 |
+| Nginx | HTTPの転送と、複数のアプリケーションコンテナへの負荷分散を担当します。通信の設定を一か所にまとめるために採用します。 |
 
-業務上の用途や機能の詳細は、現在の実装とCIだけでは確定できません。今後、仕様や機能の追加に合わせて、この概要も更新します。
+各ツールの機能は、[React Router](https://reactrouter.com/start/framework/rendering)、[ESLint](https://eslint.org/docs/latest/use/core-concepts/)、[Vitest](https://vitest.dev/guide/)、[Zod](https://zod.dev/)、[Playwright](https://playwright.dev/docs/test-assertions)、[Echo](https://echo.labstack.com/docs/routing)、[GORM](https://gorm.io/docs/connecting_to_the_database.html)、[Go](https://go.dev/doc/effective_go#goroutines)、[PostgreSQL](https://www.postgresql.org/about/)の公式資料を参照してください。
 
-## Issueと変更の管理
+### 想定する実装の分担
 
-以下は、これまでのコミット履歴とブランチ名に基づく開発手順です。Issueのタイトル・本文の書式やラベルの付け方は、履歴から統一ルールを確認できていません。
+React Routerは画面と画面に必要なデータ取得を担当し、業務上の判断やDB更新はGoにまとめます。フロントエンドではZodで入力を検証し、Goでも受け取った値を検証します。
 
-### Issueとブランチ・コミットの対応
+GoはEchoでリクエストを受け付け、業務処理からGORMとTapyrus APIのクライアントを呼び出す構成を想定しています。最初から多くの抽象化や階層を設けず、処理の重複やテストの必要性に応じて分けます。
 
-作業内容をIssue番号で関連付けます。ブランチ名には番号を含め、コミットメッセージには `#<Issue番号>` を記載します。
+DB更新とTapyrusへの送信は、ひとつのDBトランザクションだけでは完了を保証できません。処理状況をPostgreSQLに保存し、再試行時の二重送信を防ぐ方法や、送信結果を確認する手順を設計します。完了保証が必要な処理は、goroutineのメモリ上の状態だけに依存させない方針です。
 
-| Issue | 作業内容 | 対応するブランチ |
+### シーケンス図
+
+利用者が画面から更新操作を行う場合の想定です。各コンポーネント間の呼び出しと応答を、上から順に示します。処理状況の保存方法や送信結果を確認するタイミングは、実装時に具体化します。
+
+```mermaid
+sequenceDiagram
+    actor User as 利用者
+    participant UI as 画面 / React Router
+    participant Nginx as Nginx
+    participant API as Go API / Echo
+    participant DB as PostgreSQL
+    participant Tapyrus as Tapyrus API
+
+    User->>UI: 入力・更新操作
+    UI->>UI: Zodで入力検証
+    alt 入力が無効
+        UI-->>User: 入力エラーを表示
+    else 入力が有効
+        UI->>Nginx: APIリクエスト
+        Nginx->>API: 転送（複数台なら負荷分散）
+        API->>API: Go側で入力検証
+        alt 入力が無効
+            API-->>Nginx: 入力エラー
+        else 入力が有効
+            API->>API: 業務処理
+            opt DB操作が必要
+                API->>DB: GORM経由で参照・更新
+                DB-->>API: 処理結果
+            end
+            alt 業務処理に失敗
+                API-->>Nginx: エラー応答
+            else Tapyrusへの送信が不要
+                API-->>Nginx: 処理結果
+            else Tapyrusへの送信が必要
+                API->>DB: 処理状況を保存・二重送信を防ぐ確認
+                DB-->>API: 保存・確認結果
+                alt 保存・確認に失敗
+                    API-->>Nginx: エラー応答
+                else 送信済み・処理中
+                    API-->>Nginx: 保存済みの結果・処理状況
+                else 送信が必要
+                    API->>Tapyrus: 送信
+                    Tapyrus-->>API: 送信結果（またはタイムアウト）
+                    alt 送信に成功
+                        API->>DB: 成功結果を記録
+                        DB-->>API: 記録結果
+                    else 送信に失敗・結果未確定
+                        API->>DB: 失敗・結果未確定の状況を記録
+                        DB-->>API: 記録結果
+                        Note over API,Tapyrus: 再試行前に送信結果を確認し、二重送信を防ぐ
+                    end
+                    Note over API,DB: 送信後にDB記録が失敗した場合も、送信結果を確認する
+                    API-->>Nginx: 成功・失敗・処理中に応じた応答
+                end
+            end
+        end
+        Nginx-->>UI: APIレスポンス
+        UI-->>User: 結果を表示
+    end
+```
+
+図はブラウザーからNginxを経由してAPIを呼ぶ場合を示しています。React Routerのサーバー側から呼ぶ場合は、内部ネットワークでGo APIに接続します。
+
+### 負荷分散と並行処理
+
+まずはGo APIを単一コンテナで動かし、負荷テストで必要性を確認してから複数に増やします。複数に増やした際は、NginxのupstreamでGo APIへリクエストを振り分けます。初期案は順番に振り分けるラウンドロビンとし、接続が長く続く場合は接続数の少ないサーバーへ振り分ける方式も検討します。方式の詳細は[Nginxの公式資料](https://nginx.org/en/docs/http/load_balancing.html)を参照してください。
+
+Go側は各コンテナ内の並行処理を担います。goroutine自体は、複数コンテナへリクエストを振り分ける機能ではありません。必要な並行処理には同時実行数の上限、タイムアウト、キャンセルを設け、DBやTapyrus APIへ処理を送りすぎないようにします。
+
+Go APIは、セッションや処理状況を特定のコンテナのメモリだけに保存しない設計にします。コンテナを増やす際は、全コンテナのDB接続数の合計とTapyrus APIへの同時接続数も確認します。GORMの接続プールはGoの`database/sql`を利用するため、その上限を調整します。[GORMの接続プール設定](https://gorm.io/docs/connecting_to_the_database.html#Connection-Pool)
+
+初期構成ではNginxとPostgreSQLをそれぞれ単一で動かす想定です。Go APIの台数を増やしても、構成全体の冗長化やDB・Tapyrus APIの性能改善までできるわけではありません。React Routerの複数台構成も、画面側の負荷を測定したうえで検討します。
+
+### 負荷テストで確認すること
+
+負荷テストはNginx経由で行い、画面表示、APIの参照・更新、Tapyrusへの送信を含む操作を分けて測定します。ツールは未選定です。Playwrightは操作が正しく完了するかの確認に使い、継続的な負荷をかけるテストは別途用意します。
+
+| 観点 | 確認する内容 |
+| --- | --- |
+| 応答と処理量 | 同時アクセスを増やしたときの応答時間、p95・p99、毎秒の処理数、エラー率。p95・p99は、それぞれ95%・99%のリクエストが収まる応答時間です。 |
+| アプリケーション | CPU・メモリ使用量、goroutine数、タイムアウト、Nginxからの振り分け状況。 |
+| DB・外部接続 | DB接続の待ち時間、クエリやロックの待ち時間、Tapyrus APIの応答時間と失敗率。 |
+| 台数を増やした効果 | 同じ条件でGo APIが単一の場合と複数の場合を比較し、改善幅と新たに処理の待ち時間が増える箇所を確認します。 |
+| 障害と再試行 | Go APIの停止やTapyrus APIの遅延時に、エラー処理、復旧、二重送信の防止が想定どおり動くかを確認します。 |
+
+目標の同時アクセス数と応答時間は、想定する使い方が固まってから決めます。環境、データ量、コンテナ数、負荷の条件を記録して比較できるようにします。Tapyrus APIを模擬したテストと、専用の検証環境で実際に連携するテストを分け、結果にどちらの条件かを記載します。
+
+## 開発の進め方
+
+### Issueには概要と対応内容を書く
+
+作業はIssueで管理します。タイトルは変更の目的が分かる短い文にし、本文には最低限「概要」と「対応内容」を書きます。不具合の場合は、再現手順、期待する動作、実際の動作も分かる範囲で追記します。
+
+以下はIssueの記入例です。
+
+```markdown
+タイトル: フロントエンドにESLintを導入する
+
+## 概要
+コードの問題を開発中とCIで検出できるようにする。
+
+## 対応内容
+- ESLintの設定を追加する
+- npm run lintで検査できるようにする
+- CIでlintを実行する
+```
+
+### ブランチの命名規則
+
+作業ブランチは、変更の種類、Issue番号、作業内容を組み合わせて命名します。作業内容は小文字の英語をハイフンでつなぎます。
+
+```text
+<種類>/<Issue番号>-<作業内容>
+```
+
+| 種類 | 用途 | 命名例（番号は例示） |
 | --- | --- | --- |
-| #1 | READMEの作成・整備 | `docs/1-readme` |
-| #2 | React Routerの環境構築 | `chore/2-reactrouter-env` |
-| #5 | CIの整備 | `chore/5-ci` |
+| `feat` | 機能の追加 | `feat/10-add-api` |
+| `fix` | 不具合の修正 | `fix/11-fix-validation` |
+| `docs` | ドキュメントの更新 | `docs/12-update-readme` |
+| `chore` | 環境構築や依存関係、CIの整備 | `chore/13-add-eslint` |
+| `refactor` | 振る舞いを変えないコードの整理 | `refactor/14-extract-service` |
+| `test` | テストの追加や修正 | `test/15-add-e2e-tests` |
 
-Issue番号とPR番号は別の番号です。たとえば、Issue #2に対応する変更はPR #3、Issue #5に対応する変更はPR #6で取り込まれています。
-
-コミットメッセージでは、次の形式が使われています。
-
-```text
-<変更の種類>: <変更内容> #<Issue番号> @<担当者>
-```
-
-例：`chore: ReactRouterの環境構築 #2 @nao317`
-
-`#<Issue番号>` はIssueへの参照です。参照を書くだけで、マージ時にIssueを閉じる運用になっているとは限りません。
-
-### ブランチの命名
-
-作業ブランチは、次の形式で命名します。
+コミットメッセージにも変更の種類とIssue番号を含めます。担当者の指定はIssueやPRで管理します。
 
 ```text
-<変更の種類>/<Issue番号>-<作業内容>
+chore: ESLintの設定を追加 #13
 ```
-
-これまでに使われている変更の種類は、環境構築やCI整備の `chore` と、ドキュメント整備の `docs` です。作業内容は `reactrouter-env` のように、短い英語をハイフンでつないで表します。
 
 ### Gitフロー
 
-`main` と `develop` を使い、作業ブランチの変更をPRで段階的に取り込みます。
+`main`をリリース用、`develop`を開発内容の統合用とし、個々の作業はIssueに対応するブランチで進めます。
 
-| ブランチ | 役割 |
-| --- | --- |
-| `main` | `develop`でまとめた変更を取り込むブランチです。 |
-| `develop` | 個々の作業ブランチを取り込み、変更をまとめる開発用ブランチです。 |
-| `chore/...`・`docs/...` | Issueに対応する作業を進めるブランチです。 |
+1. Issueを作成し、作業の目的と対応内容を整理します。
+2. 最新の`develop`から作業ブランチを作成します。
+3. 変更をコミットしてpushし、`develop`に向けたPRを作成します。
+4. CIとレビューで変更を確認し、`develop`へマージします。
+5. リリースする変更が揃ったら、`develop`から`main`へのPRを作成します。
+6. 変更内容と確認結果をレビューし、`main`へマージします。
 
-基本の流れは次のとおりです。
+作業ブランチ → `develop` → `main`の順に変更を取り込みます。この流れを基本とし、リリース専用ブランチなどは必要になった段階で検討します。
 
-1. 対象のIssueを確認し、最新の`develop`から作業ブランチを作成します。
-2. 変更をコミットしてpushし、`develop`をマージ先とするPRを作成します。
-3. CIの結果と変更内容を確認し、PRを`develop`へマージします。
-4. 変更をまとめるタイミングで、`develop`から`main`へのPRを作成してマージします。
+### PRには変更と確認結果を書く
 
-履歴では、作業ブランチを取り込んだPR #3・#6と、`develop`を`main`へ取り込んだPR #4・#7を確認できます。いずれもマージコミットが残っています。`release`・`hotfix`ブランチや、本番環境への自動デプロイの運用は、現在の履歴とCIでは確認できません。
+PRのタイトルは、何を変更するかが分かる短い文にします。本文には「概要」または「対応内容」を記載し、関連するIssue番号も添えます。両方の見出しを埋める必要はありません。
+
+コマンドを実行した結果や動作確認の結果があれば、実行内容と結果を書きます。未実施の場合は、その旨を書き、確認済みの内容と区別します。結果は実際に確認した範囲だけを記載します。
+
+以下は、コマンドの実行が成功し、ブラウザーでの確認は未実施の場合のPRの記入例です。
+
+```markdown
+タイトル: chore: ESLintを導入する
+
+## 対応内容
+- ESLintの設定とlintスクリプトを追加
+- CIにlintを追加
+
+## 実行・動作確認の結果
+- npm run lint: 成功
+- npm run typecheck: 成功
+- npm run build: 成功
+- ブラウザーでの動作確認: 未実施
+
+## 関連Issue
+#13
+```
 
 ## CIの構成
 
@@ -100,3 +264,10 @@ scripts/tapyrus-smoke.py
 ```
 
 結合テストが失敗した場合はComposeのログを出力します。終了時には、成功・失敗にかかわらずサービスを停止し、ボリュームを削除する処理を実行します。
+
+
+### 今後追加する検証
+
+各ツールとサービスの導入に合わせて、CIの検証も追加します。現時点のCIはESLintとVitestを実行していません。
+
+ESLintとVitestは通常の品質チェックに加え、Playwrightは`e2e`ジョブでブラウザーを準備して実行する方針です。結合テストではNginx経由で各サービスの接続を確認できるようにします。負荷テストは、環境と負荷条件を揃えて実行できる手動・定期実行用のジョブを検討します。
