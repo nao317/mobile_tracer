@@ -5,3 +5,8 @@
 # React Router
 /.react-router/
 /build/
+
+# Test artifacts
+/coverage/
+/playwright-report/
+/test-results/

@@ -42,6 +42,55 @@ Create a production build:
 npm run build
 ```
 
+## Testing
+
+Run these commands from `frontend/` using Node.js 24.22.1 or later in the 24.x release line.
+
+```bash
+npm ci
+npx playwright install chromium
+```
+
+On Linux, install the browser's system dependencies if needed:
+
+```bash
+npx playwright install --with-deps chromium
+```
+
+| Command | Checks |
+| --- | --- |
+| `npm run lint` | ESLint rules for JavaScript, TypeScript, and React Hooks; warnings fail the check |
+| `npm run typecheck` | React Router route types and TypeScript |
+| `npm test` | Vitest unit tests, run once |
+| `npm run test:watch` | Vitest unit tests, rerun when files change |
+| `npm run e2e` | Playwright E2E tests in Chromium |
+
+Put unit tests beside application code as `app/**/*.test.ts(x)` or `app/**/*.spec.ts(x)`.
+Vitest uses jsdom, Testing Library, and jest-dom matchers. Its separate configuration
+keeps the React Router build plugin out of unit tests and excludes E2E tests.
+The initial unit tests cover the welcome content, resource links, and error messages.
+
+Put E2E tests in `e2e/*.spec.ts`. Playwright builds the application, starts the production
+server at `http://127.0.0.1:4173`, and stops it after testing. Keep port 4173 available;
+you do not need to start a server yourself. The initial E2E tests check the home page
+and the HTTP status and content of the 404 page.
+
+View the HTML report after a run:
+
+```bash
+npx playwright show-report
+```
+
+Failed tests retain screenshots and traces in `test-results/`. To inspect a trace:
+
+```bash
+npx playwright show-trace test-results/<test-directory>/trace.zip
+```
+
+CI runs lint, type checks, unit tests, and a production build in `quality`, with
+Chromium E2E tests in the parallel `e2e` job. The `playwright-results` artifact
+contains the report and failure diagnostics and is retained for seven days.
+
 ## Deployment
 
 ### Docker Deployment
