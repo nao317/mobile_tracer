@@ -17,7 +17,7 @@ defaults:
   run:
     working-directory: frontend
 
-# qualityとdetectは並列実行し、detectの結果でe2e/backendを有効にする。
+# quality・e2e・detectは並列実行し、detectの結果でbackendを有効にする。
 # integrationは必要な実装が揃い、先行する検証が成功した場合に実行する。
 jobs:
   # 現在のフロントエンドを常に検証する、CIの基本ジョブ。
@@ -34,17 +34,16 @@ jobs:
           check-latest: true
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      # lockfileどおりに依存を復元し、型検査と本番ビルドの両方を確認する。
+      # lockfileどおりに依存を復元し、静的解析・単体テスト・ビルドを確認する。
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
 
-  # E2E導入時は frontend/package.json に e2e スクリプトを追加する。
-  # ブラウザーなどの準備が必要なら、このジョブにセットアップを追加する。
+  # 本番ビルドを起動し、Chromiumで画面を検証する。
   e2e:
     name: Frontend E2E
-    needs: detect
-    if: needs.detect.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -57,7 +56,17 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+      - name: Upload Playwright results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
 
   # 段階的な実装に対応するため、任意ジョブの実行条件を一か所で判定する。
   # ファイルやスクリプトの存在確認のみを行い、実際の検証は各ジョブに任せる。
@@ -72,7 +81,6 @@ jobs:
 
     # GitHub Actionsのジョブ出力は文字列なので、利用側では'true'と比較する。
     outputs:
-      e2e: ${{ steps.check.outputs.e2e }}
       backend: ${{ steps.check.outputs.backend }}
       integration: ${{ steps.check.outputs.integration }}
 
@@ -115,15 +123,6 @@ jobs:
           # このステップの出力を、上記outputs経由で後続ジョブへ渡す。
           echo "backend=$backend" >> "$GITHUB_OUTPUT"
           echo "integration=$integration" >> "$GITHUB_OUTPUT"
-          # 未導入のE2Eはスキップし、導入後はスクリプトの失敗を検出する。
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          from pathlib import Path
-
-          package = json.loads(Path("frontend/package.json").read_text())
-          enabled = bool(package.get("scripts", {}).get("e2e"))
-          print(f"e2e={str(enabled).lower()}")
-          PY
 
   # Go実装の導入後に自動で有効になる。未導入の間はジョブ全体をスキップする。
   backend:
@@ -167,18 +166,18 @@ jobs:
   integration:
     name: Integration checks
 
-    # E2E未導入によるスキップは許可し、実行した検証の失敗は許可しない。
+    # 先行するすべての検証が成功した場合に実行する。
     needs: [detect, quality, e2e, backend]
 
     # !cancelled()により、依存ジョブのスキップでこの条件自体が省略されるのを防ぐ。
-    # quality/backendの成功と結合用ファイルの存在を必須にし、E2Eのみ未導入を許容する。
+    # quality/e2e/backendの成功と結合用ファイルの存在を必須にする。
     if: >-
       ${{ !cancelled() &&
           needs.detect.result == 'success' &&
           needs.detect.outputs.integration == 'true' &&
           needs.quality.result == 'success' &&
           needs.backend.result == 'success' &&
-          (needs.e2e.result == 'success' || needs.e2e.result == 'skipped') }}
+          needs.e2e.result == 'success' }}
 
     runs-on: ubuntu-latest
     timeout-minutes: 20
