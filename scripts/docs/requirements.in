@@ -1,0 +1,5 @@
+# Python 3.12+; system Pango/Harfbuzz and Noto Sans CJK JP are also required.
+weasyprint==70.0
+markdown-it-py==4.0.0
+# PDF validation and preview rendering; pinned with transitive deps in requirements.txt.
+PyMuPDF==1.26.7

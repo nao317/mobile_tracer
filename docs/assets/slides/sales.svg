@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" role="img" aria-label="仕入・整備から購入前共有・納車確認へ">
+<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748b"/></marker></defs>
+<style>text{font-family:"Noto Sans CJK JP",sans-serif;fill:#334155} .label{font-size:34px;font-weight:700}.small{font-size:27px}.note{font-size:29px}</style>
+<rect x="90" y="24" width="470" height="82" rx="14" fill="white" stroke="#2c67e5" stroke-width="3"/>
+<text x="325.0" y="77.0" class="label" text-anchor="middle">仕入・下取記録</text>
+<path d="M325.0 109 L325.0 131" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="90" y="137" width="470" height="82" rx="14" fill="white" stroke="#64748b" stroke-width="3"/>
+<text x="325.0" y="190.0" class="label" text-anchor="middle">整備履歴</text>
+<path d="M325.0 222 L325.0 244" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="90" y="250" width="470" height="82" rx="14" fill="white" stroke="#64748b" stroke-width="3"/>
+<text x="325.0" y="303.0" class="label" text-anchor="middle">購入前共有</text>
+<path d="M325.0 335 L325.0 357" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="90" y="363" width="470" height="82" rx="14" fill="white" stroke="#64748b" stroke-width="3"/>
+<text x="325.0" y="416.0" class="label" text-anchor="middle">納車確認</text>
+<rect x="615" y="170" width="345" height="270" rx="14" fill="#fff4df" stroke="#c99748" stroke-width="2"/>
+<text x="787" y="235" class="note" text-anchor="middle" style="fill:#99621b">共有範囲を選ぶ</text>
+<text x="787" y="293" class="note" text-anchor="middle" style="fill:#99621b">旧利用者の情報は除外</text>
+<text x="787" y="351" class="note" text-anchor="middle" style="fill:#99621b">全履歴と誤表示しない</text>
+<path d="M563 178 L607 222" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)" stroke-dasharray="7 6"/>
+</svg>

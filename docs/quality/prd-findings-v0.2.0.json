@@ -1,0 +1,240 @@
+{
+  "schema_version": "PRD_STANDARD_FINDINGS_V1",
+  "assessment_id": "requirements-quality-MT-REQ-20261024T205952Z",
+  "assessed_at": "2026-10-24T20:59:52Z",
+  "prd": {
+    "id": "MT-REQ",
+    "version": "0.2.0",
+    "phase": "Validate",
+    "artifact_path": "docs/design.md"
+  },
+  "standard": {
+    "skill_name": "requirements-quality",
+    "skill_version": "1.1"
+  },
+  "mode": "plan",
+  "assessment_outcome": "plan",
+  "overall_status": "CAUTION",
+  "summary_counts": {
+    "RISK": 0,
+    "CAUTION": 2,
+    "COVERED": 11,
+    "NOT_APPLICABLE": 0
+  },
+  "findings": [
+    {
+      "finding_id": "req-qual-001",
+      "checklist_item": "iso-29148-necessary",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "2. 背景・製品目標"
+      },
+      "finding": "顧客・利用者・提供側の価値と四つの製品目標が、元の依頼の中核価値に対応している。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-002",
+      "checklist_item": "iso-29148-appropriate",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "4. 対象範囲"
+      },
+      "finding": "要件を詳細設計・今回の文書生成作業と区別し、車両業務、MVP、追加導入、対象外を明示している。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-003",
+      "checklist_item": "iso-29148-unambiguous",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "7. 機能要件 / 9. 状態遷移"
+      },
+      "finding": "全機能要件に開始条件があり、提出・合意・異議・業務完了・登録・照合の状態を区別している。未決方式は未決として識別されている。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-004",
+      "checklist_item": "iso-29148-complete",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "7. 機能要件 / 13. 未決事項"
+      },
+      "finding": "必須の要件項目を維持し、制約・判断・未決事項にIDを追加している。未決事項には責任役割候補、判断ゲート、完了条件、関連要件がある。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-005",
+      "checklist_item": "iso-29148-singular",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "12. 受入条件"
+      },
+      "finding": "既存IDを能力・受入グループとして保持する適用差分が明記され、各受入行が前提・操作・観測結果を持つ。停止、最後の管理者保護、基準不足、未登録、反映、巻き戻しも独立ケースで確認できる。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-006",
+      "checklist_item": "iso-29148-feasible",
+      "status": "CAUTION",
+      "severity": "MEDIUM",
+      "location": {
+        "section": "11. MVP / 13. OQ-010"
+      },
+      "finding": "中核実証と実データ導入条件、運用手順による代替範囲は明示されたが、P0全体の予算・工数・担当・実施日程はOQ-010で未評価である。",
+      "recommendation": "実装計画の確定前にOQ-010を解決し、P0の見積、担当、予算、実施日程を記録する。範囲変更時は受入価値と代替手段を示して文書版を更新する。"
+    },
+    {
+      "finding_id": "req-qual-007",
+      "checklist_item": "iso-29148-verifiable",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "10. 非機能要件 / 12. 受入条件"
+      },
+      "finding": "17受入グループ・68ケースで、正常・拒否・欠落・通信障害・設定更新を判定できる。性能・操作性の負荷構成、標本数、測定窓、起終点も提案として記載されている。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-008",
+      "checklist_item": "iso-29148-correct",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "13. 資料との対応"
+      },
+      "finding": "資料・指定・提案・仮定・未決を区別し、未署名記録保全、Tapyrus候補化、撮影箇所・異議期限の設定化、AIの支援範囲を維持している。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-009",
+      "checklist_item": "iso-29148-conforming",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "1. 文書管理 / docs/skill-sources.md"
+      },
+      "finding": "既存IDと13章の保持、追加した3桁ID、スキルの固定コミットと出典が明示されている。完全準拠や規格認証を主張していない。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-010",
+      "checklist_item": "traceability-required-relationships",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "12. 対応表"
+      },
+      "finding": "FR→AC=29/29、FR→GOAL=29/29、NFR→AC=12/12である。P1・P2の採用時試験とMVP必須試験を区別している。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-011",
+      "checklist_item": "nist-800-160-category-presence",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "10. 非機能要件"
+      },
+      "finding": "10分類に対応する要件がある。拡張性の検証範囲と、通常DBを参照しない別検証環境の条件が記載されている。",
+      "recommendation": null
+    },
+    {
+      "finding_id": "req-qual-012",
+      "checklist_item": "smart-product-goals-achievable",
+      "status": "CAUTION",
+      "severity": "MEDIUM",
+      "location": {
+        "section": "2. 製品目標"
+      },
+      "finding": "四目標の対象・指標・目標値・比較方法・相対的測定期間は明確だが、方式・予算・担当・日程が未確定で達成可能性を確認できない。基準値は未計測として表示されている。",
+      "recommendation": "OQ-001、OQ-002、OQ-003、OQ-005、OQ-006、OQ-007、OQ-010を決定し、達成可能性と実施日程の証跡を得てSMART評価を更新する。現時点で四目標をPASSにしない。"
+    },
+    {
+      "finding_id": "req-qual-013",
+      "checklist_item": "governance-and-constraint-separation",
+      "status": "COVERED",
+      "severity": "N/A",
+      "location": {
+        "section": "1. 文書管理 / 4. 制約 / 13. 未決事項"
+      },
+      "finding": "外部指定の制約を機能・品質目標・判断と区別する。draft、候補責任者、未承認、未割当、未決・保留を明記し、文書検査と人の承認・製品受入を分離している。",
+      "recommendation": null
+    }
+  ],
+  "iso_29148_attributes": {
+    "necessary": 3,
+    "appropriate": 3,
+    "unambiguous": 2,
+    "complete": 2,
+    "singular": 2,
+    "feasible": 1,
+    "verifiable": 3,
+    "correct": 3,
+    "conforming": 3
+  },
+  "nist_800_160_nfr_categories": {
+    "performance_and_capacity": true,
+    "reliability_and_resilience": true,
+    "security": true,
+    "privacy": true,
+    "scalability_and_elasticity": true,
+    "maintainability_and_operability": true,
+    "observability": true,
+    "usability_and_accessibility": true,
+    "compatibility_and_interoperability": true,
+    "portability": true
+  },
+  "smart_product_goals": [
+    {
+      "goal_id": "GOAL-001",
+      "statement": "MVPの受入時に、三業態それぞれの代表フローを、共通の車両・案件・記録基盤と設定で完了する。",
+      "specific": true,
+      "measurable": true,
+      "achievable": false,
+      "relevant": true,
+      "time_bound": true,
+      "overall": "FAIL"
+    },
+    {
+      "goal_id": "GOAL-002",
+      "statement": "MVPの受入時に、提示した版、確認文面、回答、訂正、異議の対応を再構成できる。",
+      "specific": true,
+      "measurable": true,
+      "achievable": false,
+      "relevant": true,
+      "time_bound": true,
+      "overall": "FAIL"
+    },
+    {
+      "goal_id": "GOAL-003",
+      "statement": "MVPの受入時に、原本の不変、差し替え、基準不足、原本欠落を区別し、検証状態を説明できる。",
+      "specific": true,
+      "measurable": true,
+      "achievable": false,
+      "relevant": true,
+      "time_bound": true,
+      "overall": "FAIL"
+    },
+    {
+      "goal_id": "GOAL-004",
+      "statement": "MVPの受入時に、顧客別の設定変更、権限変更、導入・サポート作業を、他社や確定記録を変えずに行う。",
+      "specific": true,
+      "measurable": true,
+      "achievable": false,
+      "relevant": true,
+      "time_bound": true,
+      "overall": "FAIL"
+    }
+  ],
+  "fr_ac_coverage": {
+    "fr_total": 29,
+    "fr_with_ac": 29,
+    "coverage_pct": 100.0
+  },
+  "notes": "source_sha256=4346c728bb50a4443df0862377809017215467f56d1fbe28d3f3590a05f00d8c。読み取り専用レビューの結果を親がJSON（YAML 1.2互換）へ転記し、説明文を短縮した。判定・スコア・件数はレビュー結果を保持。既存IDはローカル適用として保持し、requirement_idは省略。測定可能性は提案目標と試験ケースの比較可能性、時間枠はMVP受入時等の相対窓を評価した。暦日・担当・予算・方式は未合意で達成可能性は未確認。人の承認・製品試験は未実施。"
+}

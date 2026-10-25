@@ -1,0 +1,137 @@
+{
+  "schema_version": "PRD_QUALITY_REPORT_V1",
+  "report_id": "MT-REQ-quality-20261024T205952Z",
+  "generated_at": "2026-10-24T20:59:52Z",
+  "prd": {
+    "id": "MT-REQ",
+    "version": "0.2.0",
+    "phase": "Validate",
+    "artifact_path": "docs/design.md"
+  },
+  "overall_status": "NEEDS_REVIEW",
+  "decision_thresholds": {
+    "iso_29148_core_min_score": 2,
+    "fr_to_ac_min_pct": 100.0,
+    "fr_to_goal_target_pct": 100.0
+  },
+  "gate_decisions": {
+    "validate_exit": "APPROVED_WITH_COMMENTS",
+    "finalize_exit": "NOT_EVALUATED"
+  },
+  "summary_counts": {
+    "RISK": 0,
+    "CAUTION": 2,
+    "COVERED": 11,
+    "NOT_APPLICABLE": 0
+  },
+  "severity_breakdown": {
+    "CRITICAL": 0,
+    "HIGH": 0,
+    "MEDIUM": 2,
+    "LOW": 0
+  },
+  "standards_assessed": [
+    {
+      "skill_name": "requirements-quality",
+      "skill_version": "1.1",
+      "overall_status": "CAUTION",
+      "findings_ref": "docs/quality/prd-findings-v0.2.0.json",
+      "findings_count": 13
+    }
+  ],
+  "category_summaries": {
+    "iso_29148": {
+      "average_score": 2.44,
+      "weakest_attribute": "feasible",
+      "weakest_attribute_score": 1
+    },
+    "nist_800_160": {
+      "covered_categories": 10,
+      "missing_categories": []
+    },
+    "smart": {
+      "goals_total": 4,
+      "goals_passing": 0,
+      "pass_rate_pct": 0.0
+    },
+    "fr_ac_coverage": {
+      "fr_total": 29,
+      "fr_with_ac": 29,
+      "coverage_pct": 100.0,
+      "threshold_pct": 100.0
+    },
+    "fr_goal_coverage": {
+      "fr_total": 29,
+      "fr_with_goal": 29,
+      "goal_total": 4,
+      "coverage_pct": 100.0,
+      "target_pct": 100.0,
+      "waiver_required": false
+    }
+  },
+  "top_findings": [
+    {
+      "finding_id": "req-qual-006",
+      "status": "CAUTION",
+      "severity": "MEDIUM",
+      "location": {
+        "section": "11. MVP / 13. OQ-010"
+      },
+      "finding": "中核実証と実データ導入条件、運用手順による代替範囲は明示されたが、P0全体の予算・工数・担当・実施日程はOQ-010で未評価である。",
+      "recommendation": "実装計画の確定前にOQ-010を解決し、P0の見積、担当、予算、実施日程を記録する。範囲変更時は受入価値と代替手段を示して文書版を更新する。",
+      "standard": "requirements-quality"
+    },
+    {
+      "finding_id": "req-qual-012",
+      "status": "CAUTION",
+      "severity": "MEDIUM",
+      "location": {
+        "section": "2. 製品目標"
+      },
+      "finding": "四目標の対象・指標・目標値・比較方法・相対的測定期間は明確だが、方式・予算・担当・日程が未確定で達成可能性を確認できない。基準値は未計測として表示されている。",
+      "recommendation": "OQ-001、OQ-002、OQ-003、OQ-005、OQ-006、OQ-007、OQ-010を決定し、達成可能性と実施日程の証跡を得てSMART評価を更新する。現時点で四目標をPASSにしない。",
+      "standard": "requirements-quality"
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "REC-001",
+      "priority": "P2",
+      "target_section": "11. MVP / 13. OQ-010",
+      "action": "P0の見積・予算・担当・実施日程・運用代替を実装計画の確定前に確認する。",
+      "related_finding_ids": [
+        "req-qual-006"
+      ]
+    },
+    {
+      "id": "REC-002",
+      "priority": "P2",
+      "target_section": "2. 製品目標 / 13. 未決事項",
+      "action": "目標ごとの方式・保存・権限・実施条件を合意し、実現可能性の証跡を得てSMART評価を更新する。",
+      "related_finding_ids": [
+        "req-qual-012"
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "id": "WARN-001",
+      "severity": "ADVISORY",
+      "message": "追跡率100%は記載の明示対応率であり、製品テストの実施率・合格率ではない。"
+    },
+    {
+      "id": "WARN-002",
+      "severity": "ADVISORY",
+      "message": "MVP受入時等の相対的時間枠はあるが、暦日・担当・予算・方式は未合意で四目標のSMART総合判定はFAIL。",
+      "related_finding_ids": [
+        "req-qual-012"
+      ]
+    },
+    {
+      "id": "WARN-003",
+      "severity": "INFO",
+      "message": "ValidateのAPPROVED_WITH_COMMENTSは文書品質の評価。文書はdraftを維持し、顧客・提供側の承認・製品受入とは別。Finalizeは未評価。"
+    }
+  ],
+  "notes": "source_sha256=4346c728bb50a4443df0862377809017215467f56d1fbe28d3f3590a05f00d8c。読み取り専用レビューの結果を親がJSON（YAML 1.2互換）へ転記し、説明文を短縮した。判定・スコア・件数はレビュー結果を保持。既存IDはローカル適用として保持し、requirement_idは省略。測定可能性は提案目標と試験ケースの比較可能性、時間枠はMVP受入時等の相対窓を評価した。暦日・担当・予算・方式は未合意で達成可能性は未確認。人の承認・製品試験は未実施。"
+}
