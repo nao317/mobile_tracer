@@ -1,0 +1,36 @@
+@page {
+  size: A4;
+  margin: 18mm 16mm 18mm;
+  @top-left { content: "MobilTracer 要件定義書"; color: #667085; font-size: 8pt; }
+  @top-right { content: string(doc-version); color: #667085; font-size: 8pt; }
+  @bottom-left { content: "原本: docs/design.md"; color: #667085; font-size: 8pt; }
+  @bottom-right { content: counter(page) " / " counter(pages); color: #667085; font-size: 8pt; }
+}
+html { font-family: "Noto Sans CJK JP", sans-serif; font-size: 9pt; line-height: 1.65; color: #182230; }
+body { margin: 0; }
+h1 { font-size: 23pt; line-height: 1.4; color: #163b63; margin: 8mm 0 5mm; }
+h2 { font-size: 15pt; color: #163b63; border-bottom: 1pt solid #c6d4e1; padding-bottom: 2mm; margin-top: 8mm; }
+h3 { font-size: 11pt; color: #163b63; margin-top: 5mm; }
+h4 { font-size: 10pt; }
+h1, h2, h3, h4 { break-after: avoid; }
+p, li { orphans: 3; widows: 3; }
+p { margin: 2mm 0; }
+ul, ol { padding-left: 5mm; margin: 2mm 0; }
+li { margin-bottom: 1mm; }
+a { color: #214f7b; overflow-wrap: anywhere; text-decoration: none; }
+code { font-family: "Noto Sans CJK JP", sans-serif; font-size: 8pt; overflow-wrap: anywhere; }
+pre { white-space: pre-wrap; background: #f1f5f9; padding: 3mm; border: 0.5pt solid #d6dfe8; break-inside: avoid; }
+table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 3mm 0; font-size: 8pt; }
+th, td { padding: 1.8mm; border: 0.5pt solid #c6d4e1; vertical-align: top; overflow-wrap: anywhere; }
+th { background: #e8eff6; font-weight: 700; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+blockquote { border-left: 2pt solid #8ba7c3; padding-left: 3mm; margin-left: 0; color: #344054; }
+.version { string-set: doc-version content(); font-weight: bold; }
+.build-info { font-size: 8pt; color: #475467; overflow-wrap: anywhere; }
+.toc { page-break-after: always; }
+.toc ol { list-style: none; padding-left: 0; }
+.toc li { margin: 1.3mm 0; }
+.toc a::after { content: leader(".") target-counter(attr(href), page); }
+.requirement { break-inside: avoid; }
+h3 + ul { break-inside: avoid; }

@@ -1,5 +1,15 @@
 # mobile tracer
 
+## 要件定義書とPDF
+
+要件の原本は[docs/design.md](docs/design.md)、最新版PDFは[docs/design.pdf](docs/design.pdf)です。編集・環境準備・改訂版保存・共有ドライブへの手動アップロードの手順は[docs/README.md](docs/README.md)を参照してください。
+
+準備後は、リポジトリルートで `bash scripts/docs/docs.sh build` を実行すると、文書チェックと最新版・改訂版PDFの生成を行えます。
+
+要件・受入条件・目標の対応検査結果は[docs/quality/traceability.json](docs/quality/traceability.json)、使用したスキルと適用範囲は[docs/skill-sources.md](docs/skill-sources.md)に記録しています。
+
+レビュー用の説明資料は[Marp原稿](docs/03_marp_mobiltracer-review.md)と[18枚のPDF](docs/03_marp_mobiltracer-review.pdf)です。`npm --prefix scripts/slides run build` で生成します。初回準備と改訂版保存は[文書の運用手順](docs/README.md)を参照してください。
+
 ## 構成と設計方針
 
 React Router、Go、PostgreSQL、Tapyrus APIをそれぞれDockerコンテナで動かし、NginxでHTTPリクエストの振り分けをまとめて管理する構成を採用します。開発環境ではDocker Composeで各サービスを起動する方針です。

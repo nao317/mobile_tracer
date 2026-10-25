@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" role="img" aria-label="業務・記録・回答・異議・検証の状態を分ける表示例">
+<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748b"/></marker></defs>
+<style>text{font-family:"Noto Sans CJK JP",sans-serif;fill:#334155} .label{font-size:34px;font-weight:700}.small{font-size:27px}.note{font-size:29px}</style>
+<rect x="20" y="10" width="960" height="76" rx="10" fill="#eaf0fc"/>
+<text x="65" y="59" class="label" text-anchor="start">業務</text>
+<text x="350" y="59" class="label" text-anchor="start" style="fill:#334155">返却完了</text>
+<rect x="20" y="100" width="960" height="76" rx="10" fill="#eaf0fc"/>
+<text x="65" y="149" class="label" text-anchor="start">記録</text>
+<text x="350" y="149" class="label" text-anchor="start" style="fill:#334155">提出済み v2</text>
+<rect x="20" y="190" width="960" height="76" rx="10" fill="#fff4df"/>
+<text x="65" y="239" class="label" text-anchor="start">回答</text>
+<text x="350" y="239" class="label" text-anchor="start" style="fill:#99621b">受領のみ・状態未同意</text>
+<rect x="20" y="280" width="960" height="76" rx="10" fill="#fff4df"/>
+<text x="65" y="329" class="label" text-anchor="start">異議</text>
+<text x="350" y="329" class="label" text-anchor="start" style="fill:#99621b">対応中</text>
+<rect x="20" y="370" width="960" height="76" rx="10" fill="#fff4df"/>
+<text x="65" y="419" class="label" text-anchor="start">検証</text>
+<text x="350" y="419" class="label" text-anchor="start" style="fill:#99621b">基準登録待ち</text>
+</svg>
