@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" role="img" aria-label="車両履歴から公開を許可した整備事実だけを共有">
+<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748b"/></marker></defs>
+<style>text{font-family:"Noto Sans CJK JP",sans-serif;fill:#334155} .label{font-size:34px;font-weight:700}.small{font-size:27px}.note{font-size:29px}</style>
+<rect x="50" y="40" width="900" height="105" rx="14" fill="#eaf0fc" stroke="#2c67e5" stroke-width="3"/>
+<text x="500.0" y="87.5" class="label" text-anchor="middle">蓄積した車両履歴</text>
+<text x="500.0" y="130.5" class="small" text-anchor="middle">内部識別子で追跡</text>
+<path d="M500 150 L500 210" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="50" y="235" width="420" height="135" rx="14" fill="white" stroke="#2c67e5" stroke-width="3"/>
+<text x="260.0" y="297.5" class="label" text-anchor="middle">整備事実</text>
+<text x="260.0" y="340.5" class="small" text-anchor="middle">共有する版・項目を選ぶ</text>
+<rect x="530" y="235" width="420" height="135" rx="14" fill="#fff4df" stroke="#99621b" stroke-width="3"/>
+<text x="740.0" y="297.5" class="label" text-anchor="middle">旧利用者の個人情報</text>
+<text x="740.0" y="340.5" class="small" text-anchor="middle">氏名・連絡先・署名</text>
+<path d="M260 375 L260 460" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="50" y="480" width="420" height="100" rx="14" fill="white" stroke="#2c67e5" stroke-width="3"/>
+<text x="260.0" y="542.0" class="label" text-anchor="middle">新所有者へ共有</text>
+<text x="740" y="468" class="note" text-anchor="middle" style="fill:#99621b">自動公開しない</text>
+<text x="500" y="618" class="note" text-anchor="middle">共有は相手・記録版・項目・期間で限定</text>
+</svg>

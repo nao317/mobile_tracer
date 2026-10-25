@@ -1,0 +1,11 @@
+# Documentation toolchain (PDF deliverables are tracked).
+/.venv-docs/
+__pycache__/
+*.pyc
+/docs/.build.lock
+/docs/.design-*.tmp
+/docs/quality/.traceability-*.tmp
+/.cache-docs/
+/scripts/slides/node_modules/
+/docs/.slides.lock
+/docs/.slides-*.tmp

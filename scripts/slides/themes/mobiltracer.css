@@ -1,0 +1,98 @@
+/* @theme mobiltracer */
+/* Classmethod theme adaptation for MobilTracer review; see docs/skill-sources.md. */
+@import 'classmethod';
+
+section {
+  width: 1920px;
+  height: 1080px;
+  --font-family: 'Noto Sans CJK JP', sans-serif;
+  --font-size-title: 58px;
+  --font-size-large: 48px;
+  --font-size-medium: 44px;
+  --font-size-body: 42px;
+  --font-size-small: 34px;
+  --font-size-caption: 26px;
+  --font-size-note: 26px;
+  font-family: var(--font-family);
+  font-size: 42px;
+  padding: 290px 96px 100px;
+  box-sizing: border-box;
+  line-height: 1.65;
+}
+section > h1:first-child:not(.no-header > h1) {
+  height: 126px;
+  padding-left: 96px;
+  width: 100%;
+  font-size: 58px;
+  box-sizing: border-box;
+}
+section > h1:first-child:not(.no-header > h1)::after { top: 126px; background: #cbd5e1; }
+section > h1:first-child:not(.no-header > h1)::before { content: ''; width: 12px; height: 126px; position: absolute; left: 0; top: 0; background: #2c67e5; }
+section p.lead {
+  position: absolute;
+  left: 96px;
+  right: 96px;
+  top: 164px;
+  font-size: 42px;
+  line-height: 1.55;
+  color: #334155;
+  margin: 0;
+}
+section footer {
+  position: absolute;
+  left: 96px;
+  bottom: 28px;
+  right: 150px;
+  font-size: 23px;
+  color: #64748b;
+  margin: 0;
+}
+section::after { top: auto; bottom: 28px; right: 36px; height: auto; font-size: 24px; color: #64748b; }
+section[data-marpit-pagination]::after { content: attr(data-marpit-pagination) " / " attr(data-marpit-pagination-total); }
+section p { margin: 0 0 24px; }
+section li { padding-top: 18px; }
+section > ul > li, section > ol > li { font-size: 44px; line-height: 1.7; }
+section ul, section ol { margin: 0 0 30px 42px; padding-left: 14px; line-height: 1.8; }
+section h2, section h3 { color: #244477; margin: 0 0 14px; }
+section p.takeaway { position: absolute; bottom: 96px; left: 96px; right: 96px; font-size: 34px; padding-top: 20px; border-top: 2px solid #dbe3ee; }
+section .terms { margin-top: 40px; border-left: 5px solid #2c67e5; padding-left: 34px; }
+section .terms p { font-size: 33px; margin-bottom: 12px; }
+
+section.title { justify-content: center; gap: 38px; padding: 100px; background: #f1f5fa; }
+section.title > h1:first-child:not(.no-header > h1) { position: static; width: auto; height: auto; padding: 0; font-size: 88px; color: #244477; }
+section.title > h1:first-child::before, section.title > h1:first-child::after { display: none; }
+section.title p { text-align: center; margin: 0; font-size: 38px; }
+section.title h1 + p { font-size: 56px; }
+section.section { padding: 0 120px; background: #f1f5fa; }
+section.section h2 { font-size: 76px; line-height: 1.4; margin-bottom: 40px; color: #244477; }
+section.section p { font-size: 44px; }
+
+section.content-image-right { padding-right: 60%; }
+section.content-image-right.content-35 { padding-right: 65%; }
+section.content-image-right.content-40 { padding-right: 60%; }
+section.content-image-right p:has(img) { top: 282px; height: 690px; width: calc(60% - 54px); padding: 28px; box-sizing: border-box; border-radius: 18px; right: 34px; align-items: center; background: #f3f6fa; }
+section.content-image-right.content-35 p:has(img) { width: calc(65% - 54px); }
+section.content-image-right img { max-width: 100%; max-height: 632px; width: 100%; height: auto; }
+section.content-image-right h3 { font-size: 44px; margin-top: 16px; }
+section.content-image-right h3 + p { font-size: 36px; }
+section.content-image-right ul { margin-left: 28px; padding-left: 10px; }
+section.content-image-right li { font-size: 40px; margin-bottom: 18px; }
+section.content-image > p:has(img) { height: 630px; justify-content: center; margin: 0; }
+section.content-image img { height: 620px; width: auto; max-width: 100%; }
+
+section.column-layout { gap: 64px; justify-content: space-between; }
+section.column-layout .column { width: calc(50% - 32px); padding: 34px 40px; box-sizing: border-box; background: #f3f6fa; border-top: 6px solid #2c67e5; align-self: flex-start; min-height: 500px; }
+section.column-layout .column h2 { margin: 0 0 20px; font-size: 48px; }
+section.column-layout .column h2:not(:first-child) { margin-top: 45px; }
+section.column-layout .column p { font-size: 40px; line-height: 1.7; margin-bottom: 22px; }
+section.comparison .column p { min-height: 84px; border-bottom: 1px solid #dbe3ee; padding: 10px 0 22px; margin-bottom: 10px; }
+section > table { font-size: 38px; margin: 0; width: 100%; display: table; }
+section > table th, section > table td { font-size: 38px; padding: 22px 30px; }
+section td:first-child { width: 32%; }
+section.closing { padding: 130px 120px; gap: 30px; background: #f1f5fa; }
+section.closing > h1:first-child:not(.no-header > h1) { position: static; display: block; text-align: center; height: auto; padding: 0; font-size: 72px; color: #244477; }
+section.closing > h1:first-child::before, section.closing > h1:first-child::after { display: none; }
+section.closing p.lead { position: static; font-size: 38px; margin-bottom: 35px; }
+section.closing p:not(.lead) { font-size: 48px; }
+section:is(.title, .closing) > h1:first-child:not(.no-header > h1)::before,
+section:is(.title, .closing) > h1:first-child:not(.no-header > h1)::after { display: none; }
