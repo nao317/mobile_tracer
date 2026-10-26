@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -31,14 +32,7 @@ func TestHealth(t *testing.T) {
 	if len(body) != 1 || body["status"] != "ok" {
 		t.Errorf("body = %v, want {status:ok}", body)
 	}
-	var entry struct {
-		Method string `json:"method"`
-		URI    string `json:"uri"`
-		Status int    `json:"status"`
-	}
-	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
-		t.Fatalf("decode request log: %v", err)
-	}
+	entry := requestLogForURI(t, logs.Bytes(), "/api/health")
 	if entry.Method != http.MethodGet || entry.URI != "/api/health" || entry.Status != http.StatusOK {
 		t.Errorf("unexpected request log: %+v", entry)
 	}
@@ -58,13 +52,7 @@ func TestRecover(t *testing.T) {
 	if bytes.Contains(rec.Body.Bytes(), []byte("test panic")) {
 		t.Errorf("panic details leaked in response: %s", rec.Body.String())
 	}
-	var entry struct {
-		Status int    `json:"status"`
-		Error  string `json:"error"`
-	}
-	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
-		t.Fatalf("decode panic request log: %v", err)
-	}
+	entry := requestLogForURI(t, logs.Bytes(), "/panic")
 	if entry.Status != http.StatusInternalServerError || entry.Error == "" {
 		t.Errorf("unexpected panic request log: %+v", entry)
 	}
@@ -72,5 +60,40 @@ func TestRecover(t *testing.T) {
 	e.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/api/health", nil))
 	if health.Code != http.StatusOK {
 		t.Errorf("health after panic = %d, want %d", health.Code, http.StatusOK)
+	}
+}
+
+type requestLogEntry struct {
+	Method string `json:"method"`
+	URI    string `json:"uri"`
+	Status int    `json:"status"`
+	Error  string `json:"error"`
+}
+
+func requestLogForURI(t *testing.T, logs []byte, uri string) requestLogEntry {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(logs))
+	for {
+		var entry requestLogEntry
+		if err := decoder.Decode(&entry); err == io.EOF {
+			t.Fatalf("no request log for %s", uri)
+		} else if err != nil {
+			t.Fatalf("decode request log: %v", err)
+		}
+		if entry.URI == uri {
+			return entry
+		}
+	}
+}
+
+func TestRequestLogForURIWithMultipleRecords(t *testing.T) {
+	logs := []byte(`{"msg":"panic recovered","error":"test panic"}
+{"method":"GET","uri":"/api/health","status":200}
+{"method":"GET","uri":"/panic","status":500,"error":"test panic"}
+{"msg":"another log record"}
+`)
+	entry := requestLogForURI(t, logs, "/panic")
+	if entry.Method != http.MethodGet || entry.URI != "/panic" || entry.Status != http.StatusInternalServerError || entry.Error != "test panic" {
+		t.Errorf("unexpected panic request log: %+v", entry)
 	}
 }
