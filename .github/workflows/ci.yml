@@ -166,7 +166,8 @@ jobs:
 
   # Compose上でサービス間接続とTapyrusトランザクションを確認する。
   integration:
-    name: Tapyrus integration checks
+    # GitHubの必須チェック名と一致させるため、この表示名を維持する。
+    name: Integration checks
 
     # Tapyrusの検証はフロントエンドの検証と独立して実行する。
     needs: [detect, backend]
