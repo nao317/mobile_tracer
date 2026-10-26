@@ -1,0 +1,53 @@
+name: Branch flow
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-flow:
+    name: branch-flow
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR source and destination
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$HEAD_REPO" != "$BASE_REPO" ]]; then
+            echo "::error::同じリポジトリのブランチを使用してください"
+            exit 1
+          fi
+
+          case "$BASE" in
+            main)
+              if [[ "$HEAD" != "develop" ]]; then
+                echo "::error::mainへのPRはdevelopからのみ許可します"
+                exit 1
+              fi
+              ;;
+
+            develop)
+              if [[ ! "$HEAD" =~ ^([a-z][a-z0-9-]*/)?[1-9][0-9]*-[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+                echo "::error::ブランチ名はfeat/123-add-loginまたは123-add-login形式にしてください"
+                exit 1
+              fi
+              ;;
+
+            *)
+              echo "::error::許可されていないマージ先です"
+              exit 1
+              ;;
+          esac
+
+          echo "Branch flow validation passed"
