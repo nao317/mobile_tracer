@@ -2,7 +2,9 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"mime"
@@ -15,7 +17,7 @@ import (
 
 func TestHealth(t *testing.T) {
 	var logs bytes.Buffer
-	e := New(slog.New(slog.NewJSONHandler(&logs, nil)))
+	e := New(slog.New(slog.NewJSONHandler(&logs, nil)), nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/health", nil))
 	if rec.Code != http.StatusOK {
@@ -40,7 +42,7 @@ func TestHealth(t *testing.T) {
 
 func TestRecover(t *testing.T) {
 	var logs bytes.Buffer
-	e := New(slog.New(slog.NewJSONHandler(&logs, nil)))
+	e := New(slog.New(slog.NewJSONHandler(&logs, nil)), nil)
 	e.GET("/panic", func(c *echo.Context) error {
 		panic("test panic")
 	})
@@ -95,5 +97,34 @@ func TestRequestLogForURIWithMultipleRecords(t *testing.T) {
 	entry := requestLogForURI(t, logs, "/panic")
 	if entry.Method != http.MethodGet || entry.URI != "/panic" || entry.Status != http.StatusInternalServerError || entry.Error != "test panic" {
 		t.Errorf("unexpected panic request log: %+v", entry)
+	}
+}
+
+func TestReadiness(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		check func(context.Context) error
+		want  int
+	}{
+		{name: "not configured", want: http.StatusServiceUnavailable},
+		{name: "ready", check: func(context.Context) error { return nil }, want: http.StatusOK},
+		{name: "unavailable", check: func(context.Context) error { return errors.New("dependency failed") }, want: http.StatusServiceUnavailable},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := New(slog.New(slog.NewJSONHandler(io.Discard, nil)), tt.check)
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ready", nil))
+			if rec.Code != tt.want {
+				t.Errorf("readiness status = %d, want %d", rec.Code, tt.want)
+			}
+			if bytes.Contains(rec.Body.Bytes(), []byte("dependency failed")) {
+				t.Error("dependency details leaked to public response")
+			}
+			health := httptest.NewRecorder()
+			e.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+			if health.Code != http.StatusOK {
+				t.Error("liveness must work even when Tapyrus is unavailable")
+			}
+		})
 	}
 }

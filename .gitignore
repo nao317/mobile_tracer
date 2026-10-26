@@ -9,3 +9,4 @@ __pycache__/
 /scripts/slides/node_modules/
 /docs/.slides.lock
 /docs/.slides-*.tmp
+/.env
