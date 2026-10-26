@@ -11,6 +11,7 @@
 | `docs/pdf/design-v<版>-<YYYYMMDDTHHMMSS>-JST.pdf` | 各改訂時点のPDF。日時は日本時間、過去版は上書きしない |
 | `docs/pdf/*.json` | PDFごとの生成情報。原本・PDF・生成入力のSHA-256、版、生成日時、依存版等を記録 |
 | `docs/10_22中間発表.pdf` | 参照元の発表資料。編集・上書きしない |
+| `docs/schema/` | DBスキーマの設計。テーブル案（`tables.md`）とER図（`er.md`）。DDLは`backend/db/migrations/`。要件原本から派生した設計文書 |
 | `scripts/docs/` | ビルド、印刷CSS、固定依存、履歴管理の回帰テスト |
 | `docs/quality/traceability.json` | 原本から生成する対応検査結果。要件数、目標・受入への明示対応、ケース数。直接編集しない |
 | `docs/quality/*findings*.json`・`*report*.json` | 指定スキルによる読み取り専用の文書品質レビュー結果。製品受入・人の承認とは別 |

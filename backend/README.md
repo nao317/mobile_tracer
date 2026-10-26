@@ -97,6 +97,8 @@ backend/
 ├── cmd/api/main.go           # 起動、シグナル処理、graceful shutdown
 ├── internal/config/          # 環境変数の読取・検証
 ├── internal/server/          # Echo、ミドルウェア、ルーティング
+├── db/migrations/            # DBのマイグレーション（golang-migrate）
+├── db/test/                  # マイグレーションの確認（run.sh）
 ├── Dockerfile
 ├── go.mod
 └── go.sum
