@@ -18,7 +18,7 @@ defaults:
     working-directory: frontend
 
 # quality・e2e・detectは並列実行し、detectの結果でbackendを有効にする。
-# integrationは必要な実装が揃い、先行する検証が成功した場合に実行する。
+# integrationはGoの検証後にローカルTapyrus環境を検証する。
 jobs:
   # 現在のフロントエンドを常に検証する、CIの基本ジョブ。
   quality:
@@ -106,8 +106,10 @@ jobs:
           # 今後ファイル構成を変える場合は、この一覧と実行ステップを合わせて更新する。
           required_files=(
             "compose.yaml"
-            "frontend/Dockerfile"
             "backend/Dockerfile"
+            "backend/cmd/tapyrus-check/main.go"
+            "docker/tapyrus/init.sh"
+            "docker/tapyrus/bootstrap.sh"
             "scripts/init.sh"
             "scripts/smoke.py"
             "scripts/tapyrus-smoke.py"
@@ -160,24 +162,22 @@ jobs:
       # -count=1でテストキャッシュを使わず、その実行での結果を得る。
       - run: go vet ./...
       - run: go test -race -count=1 ./...
-      - run: go build ./cmd/api
+      - run: go build ./cmd/api ./cmd/tapyrus-check
 
   # Compose上でサービス間接続とTapyrusトランザクションを確認する。
   integration:
-    name: Integration checks
+    name: Tapyrus integration checks
 
-    # 先行するすべての検証が成功した場合に実行する。
-    needs: [detect, quality, e2e, backend]
+    # Tapyrusの検証はフロントエンドの検証と独立して実行する。
+    needs: [detect, backend]
 
     # !cancelled()により、依存ジョブのスキップでこの条件自体が省略されるのを防ぐ。
-    # quality/e2e/backendの成功と結合用ファイルの存在を必須にする。
+    # backendの成功と結合用ファイルの存在を必須にする。
     if: >-
       ${{ !cancelled() &&
           needs.detect.result == 'success' &&
           needs.detect.outputs.integration == 'true' &&
-          needs.quality.result == 'success' &&
-          needs.backend.result == 'success' &&
-          needs.e2e.result == 'success' }}
+          needs.backend.result == 'success' }}
 
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -189,7 +189,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Compose起動前にローカルTapyrus環境を初期化する。
+      # devモードの鍵・ジェネシス・ウォレットと検証用コインを用意する。
       - name: Initialize local Tapyrus
         run: bash scripts/init.sh
 
@@ -205,6 +205,13 @@ jobs:
 
       - name: Check Tapyrus transaction
         run: python3 scripts/tapyrus-smoke.py
+
+      - name: Check initialization is repeatable
+        run: |
+          before=$(docker compose exec -T backend /app/tapyrus-check)
+          bash scripts/init.sh
+          after=$(docker compose exec -T backend /app/tapyrus-check)
+          test "$before" = "$after"
 
       # 失敗時は原因調査用のログを残し、後片付けは成功・失敗にかかわらず試みる。
       - name: Show logs
