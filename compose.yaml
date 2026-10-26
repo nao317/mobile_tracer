@@ -5,13 +5,92 @@ services:
     environment:
       PORT: "8080"
       SHUTDOWN_TIMEOUT: "${SHUTDOWN_TIMEOUT:-10s}"
+      TAPYRUS_RPC_URL: http://tapyrusd:12381
+      TAPYRUS_RPC_USER: ${TAPYRUS_RPC_USER:-mobiletracer}
+      TAPYRUS_RPC_PASSWORD: ${TAPYRUS_RPC_PASSWORD:?Run bash scripts/init.sh first}
+      TAPYRUS_REST_URL: http://esplora:3000
+      TAPYRUS_TIMEOUT: ${TAPYRUS_TIMEOUT:-5s}
+    depends_on:
+      esplora:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     # Keep this longer than SHUTDOWN_TIMEOUT when changing the shutdown limit.
     stop_grace_period: ${BACKEND_STOP_GRACE_PERIOD:-15s}
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "-O", "/dev/null", "http://127.0.0.1:8080/api/health"]
+      test: ["CMD", "wget", "--quiet", "-O", "/dev/null", "http://127.0.0.1:8080/api/ready"]
       interval: 10s
-      timeout: 3s
+      timeout: 7s
       start_period: 5s
       retries: 3
+
+  tapyrus-init:
+    image: &core-image tapyrus/tapyrusd:v0.7.2@sha256:3ef027bb32855d771b632d65a004b5b6a55a06da1f37d39cad181c3329fb9d82
+    entrypoint: ["sh", "/opt/tapyrus/init.sh"]
+    environment: &core-environment
+      TAPYRUS_NETWORK_ID: ${TAPYRUS_NETWORK_ID:-1905960821}
+      TAPYRUS_RPC_USER: ${TAPYRUS_RPC_USER:-mobiletracer}
+      TAPYRUS_RPC_PASSWORD: ${TAPYRUS_RPC_PASSWORD:?Run bash scripts/init.sh first}
+      TAPYRUS_WALLET: ${TAPYRUS_WALLET:-mobile-tracer}
+    volumes: &core-volumes
+      - tapyrus-data:/var/lib/tapyrus
+      - tapyrus-auth:/var/lib/tapyrus-auth
+      - ./docker/tapyrus:/opt/tapyrus:ro
+
+  tapyrusd:
+    image: *core-image
+    entrypoint: ["tapyrusd", "-datadir=/var/lib/tapyrus", "-conf=/var/lib/tapyrus/tapyrus.conf", "-printtoconsole"]
+    environment: *core-environment
+    volumes: *core-volumes
+    depends_on:
+      tapyrus-init:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "tapyrus-cli", "-conf=/var/lib/tapyrus/tapyrus.conf", "getblockchaininfo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  tapyrus-bootstrap:
+    image: *core-image
+    entrypoint: ["sh", "/opt/tapyrus/bootstrap.sh"]
+    environment: *core-environment
+    volumes: *core-volumes
+    depends_on:
+      tapyrusd:
+        condition: service_healthy
+
+  esplora:
+    build:
+      context: ./backend
+      target: esplora
+    entrypoint: ["sh", "-ec"]
+    command:
+      - >-
+        exec electrs --network dev --network-id "$$TAPYRUS_NETWORK_ID"
+        --daemon-rpc-addr tapyrusd:12381 --jsonrpc-import
+        --daemon-dir /var/lib/tapyrus-auth
+        --db-dir /var/lib/electrs --http-addr 0.0.0.0:3000
+    environment:
+      <<: *core-environment
+      TAPYRUS_RPC_URL: http://tapyrusd:12381
+      TAPYRUS_REST_URL: http://127.0.0.1:3000
+      TAPYRUS_TIMEOUT: ${TAPYRUS_TIMEOUT:-5s}
+    volumes:
+      - esplora-data:/var/lib/electrs
+      - tapyrus-auth:/var/lib/tapyrus-auth:ro
+    depends_on:
+      tapyrus-bootstrap:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/tapyrus-check"]
+      interval: 3s
+      timeout: 7s
+      retries: 40
+
+volumes:
+  tapyrus-data:
+  tapyrus-auth:
+  esplora-data:

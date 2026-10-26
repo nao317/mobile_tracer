@@ -2,9 +2,11 @@
 
 ## バックエンドAPIを起動する
 
-Go・EchoのAPIは `backend` ディレクトリにあります。リポジトリルートで `docker compose up --build --wait backend` を実行すると起動し、`curl -i http://localhost:8080/api/health` でHTTP 200と `{"status":"ok"}` を確認できます。
+Go・EchoのAPIは `backend` ディレクトリにあります。初回はリポジトリルートで `bash scripts/init.sh` を実行し、続いて `docker compose up --build --wait --wait-timeout 180` でGo API・Tapyrus Core・Esploraを起動します。`curl -i http://localhost:8080/api/health` でHTTP 200と `{"status":"ok"}` を確認できます。
 
 Goを使ったローカル起動、環境変数、テストの実行方法は[バックエンドのREADME](backend/README.md)を参照してください。
+
+Tapyrusの初期化、接続確認、検証用送金、停止・データ削除の方法は[Tapyrusのローカル開発環境](docs/tapyrus.md)に記載しています。外部テストネットに接続せず、単一ノードの開発モードで検証します。
 
 ## 要件定義書とPDF
 
@@ -20,7 +22,7 @@ Goを使ったローカル起動、環境変数、テストの実行方法は[�
 
 React Router、Go、PostgreSQL、Tapyrus APIをそれぞれDockerコンテナで動かし、NginxでHTTPリクエストの振り分けをまとめて管理する構成を採用します。開発環境ではDocker Composeで各サービスを起動する方針です。
 
-現在はフロントエンドの開発環境・CIと、Go・EchoのヘルスチェックAPI・Docker Composeを用意しています。以下には、今後導入する技術を含めた設計方針を記載します。
+現在はフロントエンドの開発環境・CI、Go・EchoのAPI基盤と、Tapyrus Core・Esploraのローカル開発環境を用意しています。以下には、今後導入する技術を含めた設計方針を記載します。
 
 ### 技術構成図
 
@@ -68,7 +70,7 @@ Nginxで外部からのHTTPリクエストを受け付け、画面のリクエ�
 | GORM | GoからPostgreSQLを操作します。定型的なDBアクセスをまとめ、業務処理を読みやすく保つために採用します。 |
 | goroutine | Go内で処理を並行して実行する言語機能です。独立した処理を並行させる場合に利用し、同時実行数は制御します。 |
 | PostgreSQL | 業務データと処理状況を保存します。トランザクションや制約を使ってデータの整合性を管理するために採用します。 |
-| Tapyrus API | Tapyrusとの連携を担当します。ブロックチェーンへの操作をGoの業務処理から分離するために採用します。利用するAPI実装、必要なノード、接続仕様は導入時に確認します。 |
+| Tapyrus API | ローカル開発ではTapyrus CoreのRPCとEsploraのREST APIへGoから接続します。ハッシュ登録の業務処理と本番での接続・運用方式は別Issueで実装・決定します。 |
 | Docker・Docker Compose | サービスごとに実行環境を分け、開発・結合テストで同じ構成を起動できるようにします。 |
 | Nginx | HTTPの転送と、複数のアプリケーションコンテナへの負荷分散を担当します。通信の設定を一か所にまとめるために採用します。 |
 
@@ -260,11 +262,11 @@ PRのタイトルは、何を変更するかが分かる短い文にします。
 | `detect` | Go API・結合テストに必要な実装の有無を確認 | 毎回実行 |
 | `e2e` | Chromiumを準備し、本番ビルドに対してPlaywrightを実行 | 毎回実行 |
 | `backend` | Goの整形確認、静的解析、データ競合を検出するテスト、APIのビルド | GoモジュールとAPIのエントリーポイントがある場合 |
-| `integration` | Composeでの起動、サービス間接続とTapyrusトランザクションの確認 | 必要なファイルが揃い、先行する検証が成功した場合 |
+| `integration` | Go API・Core・Esploraの起動、接続・送金・承認・再起動後のデータ保持・初期化の再実行を確認 | 必要なファイルが揃い、backendが成功した場合 |
 
 `quality`・`e2e`・`detect`は並列で動きます。`backend`は`detect`の判定後に実行されます。
 
-`integration`は先行ジョブの結果を待ちます。必要なファイルが揃い、`quality`・`e2e`・`backend`がすべて成功した場合に実行します。ワークフローがキャンセルされた場合は実行しません。
+`integration`は`backend`の成功後に、フロントエンドの検証と独立して実行します。必要なファイルの存在も確認し、ワークフローがキャンセルされた場合は実行しません。
 
 Playwrightのレポートと、失敗時のスクリーンショット・トレースは、`e2e`ジョブの成果物`playwright-results`として7日間保存します。ローカルでの実行手順は[フロントエンドのREADME](frontend/README.md#testing)を参照してください。
 
@@ -274,8 +276,10 @@ Node.jsを使うジョブでは、24.22.1以上・25未満の範囲で最新の�
 
 ```text
 compose.yaml
-frontend/Dockerfile
 backend/Dockerfile
+backend/cmd/tapyrus-check/main.go
+docker/tapyrus/init.sh
+docker/tapyrus/bootstrap.sh
 scripts/init.sh
 scripts/smoke.py
 scripts/tapyrus-smoke.py
