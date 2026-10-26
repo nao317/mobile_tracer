@@ -1,6 +1,6 @@
 # バックエンドAPI
 
-Go・Echoで動くAPIの最小構成です。`GET /api/health` はHTTP 200と `{"status":"ok"}` を返します。PostgreSQL・Tapyrus APIへの接続、業務API、Nginx経由のアクセスは別Issueで実装します。
+Go・Echoで動くAPIです。`GET /api/health` はAPI単体の稼働を確認し、HTTP 200と `{"status":"ok"}` を返します。`GET /api/ready` はTapyrus CoreとEsploraへの接続・索引の準備状態を確認します。PostgreSQLへの接続、業務API、Nginx経由のアクセスは別Issueで実装します。
 
 ## ローカルで起動する
 
@@ -30,8 +30,10 @@ go build -o bin/api ./cmd/api
 Docker EngineとDocker Compose v2を用意し、リポジトリルートから実行します。イメージはビルド用と実行用を分け、APIを非rootユーザーで実行します。
 
 ```bash
-docker compose up --build --wait backend
+bash scripts/init.sh
+docker compose up --build --wait --wait-timeout 180
 curl -i http://localhost:8080/api/health
+curl -i http://localhost:8080/api/ready
 docker compose logs -f backend
 ```
 
@@ -40,6 +42,8 @@ docker compose logs -f backend
 ```bash
 docker compose down
 ```
+
+Tapyrusの構成・初期化・検証用トランザクション・データ削除の手順は[ローカル開発環境の説明](../docs/tapyrus.md)を参照してください。
 
 ホスト側の8080番ポートが使用中の場合は、公開ポートを変更できます。
 
@@ -60,6 +64,12 @@ APIは起動時に環境変数を読み取ります。未設定または空文�
 | `SHUTDOWN_TIMEOUT` | `10s` | 終了時に処理中のリクエストを待つ上限。`time.ParseDuration` で解釈できる正の値（例: `5s`、`1m`）。Composeでも指定できます。 |
 | `BACKEND_PORT` | `8080` | Compose専用。ホストに公開するポート。 |
 | `BACKEND_STOP_GRACE_PERIOD` | `15s` | Compose専用。停止時にコンテナを強制終了するまでの猶予。`SHUTDOWN_TIMEOUT` より長く設定してください。 |
+| `TAPYRUS_RPC_URL` | 未設定 | CoreのRPC接続先。Composeでは `http://tapyrusd:12381`。 |
+| `TAPYRUS_REST_URL` | 未設定 | EsploraのREST接続先。Composeでは `http://esplora:3000`。 |
+| `TAPYRUS_RPC_USER` / `TAPYRUS_RPC_PASSWORD` | 未設定 | CoreのRPC認証情報。両URLを指定する場合に必要。 |
+| `TAPYRUS_TIMEOUT` | `5s` | 接続確認全体の上限時間。正の時間を指定。 |
+
+ローカル起動で両接続先を省略すると、API単体で動きます。この場合は `/api/health` が200、`/api/ready` が503を返します。接続先を設定する場合は両URLと認証情報を揃えてください。
 
 ローカルでの指定例です。
 
@@ -83,20 +93,22 @@ SHUTDOWN_TIMEOUT=20s BACKEND_STOP_GRACE_PERIOD=25s docker compose up --build --w
 gofmt -l .
 go vet ./...
 go test -race -count=1 ./...
-go build ./cmd/api
+go build ./cmd/api ./cmd/tapyrus-check
 ```
 
 `gofmt -l .` は、整形が必要なファイルがなければ何も表示しません。整形する場合は `gofmt -w .` を実行します。
 
-テストではヘルスチェックのステータス・JSON・リクエストログ、パニックからの復旧、環境変数の既定値と入力エラーを確認します。CIの `backend` ジョブでも同じ検査とビルドを行います。
+テストではヘルスチェック・準備状態の応答、ログ、パニックからの復旧、設定値の検証と、Tapyrusの接続失敗・タイムアウト・チェーンの不一致を確認します。CIの `backend` ジョブでも同じ検査とビルドを行います。
 
 ## ディレクトリ構成
 
 ```text
 backend/
 ├── cmd/api/main.go           # 起動、シグナル処理、graceful shutdown
+├── cmd/tapyrus-check/main.go # Core・Esploraへの接続確認
 ├── internal/config/          # 環境変数の読取・検証
 ├── internal/server/          # Echo、ミドルウェア、ルーティング
+├── internal/tapyrus/         # CoreのRPC・EsploraのRESTクライアント
 ├── db/migrations/            # DBのマイグレーション（golang-migrate）
 ├── db/test/                  # マイグレーションの確認（run.sh）
 ├── Dockerfile
