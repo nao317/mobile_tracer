@@ -124,7 +124,7 @@ jobs:
           echo "backend=$backend" >> "$GITHUB_OUTPUT"
           echo "integration=$integration" >> "$GITHUB_OUTPUT"
 
-  # Go実装の導入後に自動で有効になる。未導入の間はジョブ全体をスキップする。
+  # backend/go.modとcmd/api/main.goの存在により有効になる。
   backend:
     name: Go checks
     needs: detect
