@@ -1179,9 +1179,16 @@ CREATE TABLE app.share_grants (
   CHECK (num_nonnulls(revoked_by, revoked_at, revoke_reason) IN (0, 3))
 );
 
--- 発行と受け入れは一度だけ。共有する版が一つもないものは発行できない
+-- 発行前の状態で作り、範囲を決めてから発行する。発行と受け入れは一度だけ。
+-- 共有する版が一つもないものは発行できない
 CREATE FUNCTION app.guard_share_grant() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.issued_at IS NOT NULL THEN
+      RAISE EXCEPTION '共有は発行前の状態で作ってから発行してください';
+    END IF;
+    RETURN NEW;
+  END IF;
   IF (OLD.issued_at IS NOT NULL
       AND (NEW.issued_by, NEW.issued_at) IS DISTINCT FROM (OLD.issued_by, OLD.issued_at))
   OR (OLD.accepted_at IS NOT NULL
@@ -1201,7 +1208,7 @@ CREATE TRIGGER share_grants_columns
   FOR EACH ROW EXECUTE FUNCTION app.allow_columns(
     'issued_by', 'issued_at', 'accepted_by', 'accepted_at', 'revoked_by', 'revoked_at', 'revoke_reason');
 CREATE TRIGGER share_grants_guard
-  BEFORE UPDATE ON app.share_grants
+  BEFORE INSERT OR UPDATE ON app.share_grants
   FOR EACH ROW EXECUTE FUNCTION app.guard_share_grant();
 CREATE TRIGGER share_grants_revoked
   BEFORE UPDATE ON app.share_grants
