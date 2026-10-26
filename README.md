@@ -1,5 +1,11 @@
 # mobile tracer
 
+## バックエンドAPIを起動する
+
+Go・EchoのAPIは `backend` ディレクトリにあります。リポジトリルートで `docker compose up --build --wait backend` を実行すると起動し、`curl -i http://localhost:8080/api/health` でHTTP 200と `{"status":"ok"}` を確認できます。
+
+Goを使ったローカル起動、環境変数、テストの実行方法は[バックエンドのREADME](backend/README.md)を参照してください。
+
 ## 要件定義書とPDF
 
 要件の原本は[docs/design.md](docs/design.md)、最新版PDFは[docs/design.pdf](docs/design.pdf)です。編集・環境準備・改訂版保存・共有ドライブへの手動アップロードの手順は[docs/README.md](docs/README.md)を参照してください。
@@ -14,7 +20,7 @@
 
 React Router、Go、PostgreSQL、Tapyrus APIをそれぞれDockerコンテナで動かし、NginxでHTTPリクエストの振り分けをまとめて管理する構成を採用します。開発環境ではDocker Composeで各サービスを起動する方針です。
 
-現在はフロントエンドの開発環境とCIを整備しています。以下には、今後導入する技術と設計方針を記載します。
+現在はフロントエンドの開発環境・CIと、Go・EchoのヘルスチェックAPI・Docker Composeを用意しています。以下には、今後導入する技術を含めた設計方針を記載します。
 
 ### 技術構成図
 
