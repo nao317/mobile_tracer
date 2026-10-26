@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # セキュリティ修正版24.22.1を下限とし、24系の最新リリースを取得する。
           node-version: '>=24.22.1 <25'
@@ -47,8 +47,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # qualityと同じNode.jsのバージョン条件を使う。
           node-version: '>=24.22.1 <25'
@@ -60,7 +60,7 @@ jobs:
       - run: npm run e2e
       - name: Upload Playwright results
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-results
           path: |
@@ -85,7 +85,7 @@ jobs:
       integration: ${{ steps.check.outputs.integration }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check required files
         id: check
@@ -139,9 +139,9 @@ jobs:
         working-directory: backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v7
         with:
           # Goのバージョンと依存キャッシュはバックエンド側の定義に合わせる。
           go-version-file: backend/go.mod
@@ -187,7 +187,7 @@ jobs:
         working-directory: .
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # devモードの鍵・ジェネシス・ウォレットと検証用コインを用意する。
       - name: Initialize local Tapyrus
