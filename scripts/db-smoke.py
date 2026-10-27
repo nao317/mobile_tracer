@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-from tapyrus_common import ROOT, backend_url, compose
+from tapyrus_common import ROOT, application_url, compose
 
 
 def expect_status(base, path, expected):
@@ -25,7 +25,7 @@ def expect_status(base, path, expected):
 
 
 def main():
-    base = backend_url()
+    base = application_url()
     expect_status(base, "/api/ready", 200)
     # A separate API process must fail before listening if authentication fails.
     password = "invalid-smoke-" + uuid.uuid4().hex

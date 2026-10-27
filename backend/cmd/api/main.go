@@ -35,6 +35,10 @@ func main() {
 }
 
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr error) {
+	proxies, err := config.LoadTrustedProxies()
+	if err != nil {
+		return err
+	}
 	tapyrusCfg, err := config.LoadTapyrus()
 	if err != nil {
 		return err
@@ -62,8 +66,10 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
+	e := server.New(logger, db.Ping, readiness)
+	server.ConfigureProxy(e, proxies)
 	srv := &http.Server{
-		Handler:           server.New(logger, db.Ping, readiness),
+		Handler:           e,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	serveErr := make(chan error, 1)

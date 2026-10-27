@@ -25,3 +25,18 @@ test("an unknown URL displays the 404 page", async ({ page }) => {
     page.getByText("The requested page could not be found."),
   ).toBeVisible();
 });
+
+test("the browser can call the API on the same origin through Nginx", async ({ page }) => {
+  test.skip(!process.env.PLAYWRIGHT_BASE_URL, "requires the Compose environment");
+  await page.goto("/");
+  const results = await page.evaluate(async () => {
+    return Promise.all(["/api/health", "/api/ready"].map(async (path) => {
+      const response = await fetch(path);
+      return { status: response.status, body: await response.json() };
+    }));
+  });
+  expect(results).toEqual([
+    { status: 200, body: { status: "ok" } },
+    { status: 200, body: { status: "ok" } },
+  ]);
+});

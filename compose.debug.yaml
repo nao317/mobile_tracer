@@ -1,0 +1,11 @@
+# 開発時の直接接続用。docker compose -f compose.yaml -f compose.debug.yaml up ... で使う。
+services:
+  backend:
+    ports:
+      - "127.0.0.1:${BACKEND_DEBUG_PORT:-8081}:8080"
+  frontend:
+    ports:
+      - "127.0.0.1:${FRONTEND_DEBUG_PORT:-3000}:3000"
+  db:
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
