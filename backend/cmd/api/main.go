@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nao317/mobile_tracer/backend/internal/business"
 	"github.com/nao317/mobile_tracer/backend/internal/config"
 	"github.com/nao317/mobile_tracer/backend/internal/database"
 	"github.com/nao317/mobile_tracer/backend/internal/server"
@@ -35,6 +36,10 @@ func main() {
 }
 
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr error) {
+	apiAuth, err := config.LoadBusinessAuth()
+	if err != nil {
+		return err
+	}
 	proxies, err := config.LoadTrustedProxies()
 	if err != nil {
 		return err
@@ -67,6 +72,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 		return fmt.Errorf("listen: %w", err)
 	}
 	e := server.New(logger, db.Ping, readiness)
+	server.RegisterBusiness(e, business.New(db.GORM), apiAuth)
 	server.ConfigureProxy(e, proxies)
 	srv := &http.Server{
 		Handler:           e,

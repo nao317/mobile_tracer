@@ -76,7 +76,7 @@ def main():
             raise RuntimeError("Frontend 404 was not preserved")
     for path in ("/api", "/api/not-a-real-endpoint"):
         body, kind = fetch(base, path, status=404)
-        if kind != "application/json" or json.loads(body).get("message") != "Not Found":
+        if kind != "application/json" or json.loads(body).get("error", {}).get("code") != "not_found":
             raise RuntimeError("API 404 was not returned by Go")
 
     marker = uuid.uuid4().hex

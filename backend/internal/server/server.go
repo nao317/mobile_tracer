@@ -10,7 +10,7 @@ import (
 )
 
 func New(logger *slog.Logger, checks ...func(context.Context) error) *echo.Echo {
-	e := echo.New()
+	e := echo.NewWithConfig(echo.Config{NoGroupAutoRegister404Routes: true})
 	e.Logger = logger
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())

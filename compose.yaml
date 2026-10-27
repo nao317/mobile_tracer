@@ -35,6 +35,9 @@ services:
     build:
       context: ./backend
     environment:
+      APP_ENV: ${APP_ENV:-production}
+      DEV_AUTH_TOKEN: ${DEV_AUTH_TOKEN:-}
+      DEV_AUTH_STAFF_ID: ${DEV_AUTH_STAFF_ID:-}
       PORT: "8080"
       SHUTDOWN_TIMEOUT: "${SHUTDOWN_TIMEOUT:-10s}"
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
