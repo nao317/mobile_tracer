@@ -367,7 +367,7 @@ CREATE TRIGGER import_job_rows_fixed
 -- ---------------------------------------------------------------
 
 -- 顧客、依頼者、購入者など社外の人・会社。氏名・連絡先などの基本情報をこの表にまとめる。
--- 写真、自由記述、署名、本人控え、確認依頼の文面にも個人情報が含まれ得るので、削除の対象はこの表のほかも含めて管理する
+-- 写真、自由記述、署名、本人控えにも個人情報が含まれ得るので、削除の対象はこの表のほかも含めて管理する
 CREATE TABLE app.parties (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id       uuid NOT NULL REFERENCES app.tenants (id),
@@ -1427,7 +1427,7 @@ CREATE TABLE integrity.anchors (
   manifest_hash      text NOT NULL,
   status             text NOT NULL DEFAULT 'unregistered'
                      CHECK (status IN ('unregistered', 'queued', 'sending', 'unknown', 'registered', 'failed')),
-  external_ref       text,  -- 登録先での参照（トランザクション ID など）
+  external_ref       text,  -- 登録先での参照（Tapyrus では成功したトランザクションの txid）
   registered_at      timestamptz,
   created_at         timestamptz NOT NULL DEFAULT now(),
   UNIQUE (tenant_id, case_id, id),
@@ -1453,12 +1453,16 @@ CREATE TRIGGER anchors_registered
 
 -- 照合は registered の基準だけを信じるので、成功した試行がないまま registered にはできない
 -- 照会（lookup）で登録が見つかった場合も成功に数える
+-- external_ref は、成功した試行で送ったか照会したトランザクションの txid でなければならない
 CREATE FUNCTION app.require_succeeded_attempt() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM integrity.anchor_attempts WHERE anchor_id = NEW.id AND outcome = 'succeeded'
+    SELECT 1
+      FROM integrity.anchor_attempts a
+      JOIN integrity.anchor_transactions t ON t.id = a.transaction_id
+     WHERE a.anchor_id = NEW.id AND a.outcome = 'succeeded' AND t.txid = NEW.external_ref
   ) THEN
-    RAISE EXCEPTION '成功した試行がない検証基準は registered にできません';
+    RAISE EXCEPTION 'external_ref が成功した試行の txid と一致しない検証基準は registered にできません';
   END IF;
   RETURN NEW;
 END $$;
@@ -1471,9 +1475,30 @@ CREATE TRIGGER anchors_no_delete
   BEFORE DELETE ON integrity.anchors
   FOR EACH ROW EXECUTE FUNCTION app.reject_change();
 
+-- 送る前に保存する署名済みのトランザクション。応答が失われても、同じ txid で照会し、同じバイト列を再送できる
+-- manifest は登録する内容なので anchors に置き、ここには送るトランザクションだけを置く
+-- 作り直したときは行を足し、前の行は残す
+CREATE TABLE integrity.anchor_transactions (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   uuid NOT NULL,
+  case_id     uuid NOT NULL,
+  anchor_id   uuid NOT NULL,
+  raw_tx      bytea NOT NULL,  -- 署名済みのトランザクション。再送ではこのバイト列をそのまま送る
+  txid        text NOT NULL UNIQUE
+              CONSTRAINT anchor_transactions_txid_format CHECK (txid ~ '^[0-9a-f]{64}$'),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, case_id, anchor_id, id),
+  FOREIGN KEY (tenant_id, case_id, anchor_id) REFERENCES integrity.anchors (tenant_id, case_id, id)
+);
+
+CREATE TRIGGER anchor_transactions_fixed
+  BEFORE UPDATE OR DELETE ON integrity.anchor_transactions
+  FOR EACH ROW EXECUTE FUNCTION app.reject_change();
+
 -- 登録と照会の試行。送る前に行を作り、結果が分かったら埋める
 -- 再起動しても、結果の分からない試行が残っていれば再送の前に照会できる
 -- 同じ登録の再試行は anchors.id で、一回ごとの試行はこの表の id で見分ける
+-- どの署名済みトランザクションを送ったか、照会したかを transaction_id で指す
 CREATE TABLE integrity.anchor_attempts (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id        uuid NOT NULL,
@@ -1481,12 +1506,16 @@ CREATE TABLE integrity.anchor_attempts (
   anchor_id        uuid NOT NULL,
   attempt_no       integer NOT NULL CONSTRAINT anchor_attempts_attempt_no_positive CHECK (attempt_no > 0),
   kind             text NOT NULL CHECK (kind IN ('submit', 'lookup')),
+  transaction_id   uuid NOT NULL,  -- 送った、または照会したトランザクション
   outcome       text CHECK (outcome IN ('succeeded', 'failed', 'timeout', 'not_found')),
   response         jsonb,  -- 登録先の応答をそのまま残す
   created_at       timestamptz NOT NULL DEFAULT now(),
   finished_at      timestamptz,
   UNIQUE (anchor_id, attempt_no),
   FOREIGN KEY (tenant_id, case_id, anchor_id) REFERENCES integrity.anchors (tenant_id, case_id, id),
+  -- 別の検証基準のトランザクションは指せない
+  FOREIGN KEY (tenant_id, case_id, anchor_id, transaction_id)
+    REFERENCES integrity.anchor_transactions (tenant_id, case_id, anchor_id, id),
   CHECK ((outcome IS NULL) = (finished_at IS NULL))
 );
 

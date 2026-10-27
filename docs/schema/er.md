@@ -377,7 +377,9 @@ erDiagram
 ```mermaid
 erDiagram
   record_versions ||--o{ anchors : "検証基準"
+  anchors ||--o{ anchor_transactions : "署名済みのトランザクション"
   anchors ||--o{ anchor_attempts : "登録と照会の試行"
+  anchor_transactions ||--o{ anchor_attempts : "送ったか照会したトランザクション"
   record_versions ||--o{ verification_runs : "照合"
   anchors |o--o{ verification_runs : "使った基準"
   tenants ||--o{ retention_policies : "保存期間"
@@ -406,9 +408,16 @@ erDiagram
     text status "unregistered / queued / sending / unknown / registered / failed"
     text external_ref
   }
+  anchor_transactions {
+    uuid id PK
+    uuid anchor_id FK
+    bytea raw_tx
+    text txid UK
+  }
   anchor_attempts {
     uuid id PK
     uuid anchor_id FK
+    uuid transaction_id FK
     integer attempt_no
     text kind "submit / lookup"
     text outcome "succeeded / failed / timeout / not_found"

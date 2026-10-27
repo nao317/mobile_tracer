@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 空の DB にマイグレーションを番号順に流し、制約のテストと書き方の決まりの確認をする。
+# 空の DB にマイグレーションを番号順に流し、制約のテスト、書き方の決まりの確認、同時実行のテストをする。
 # 接続先は PGHOST、PGPORT、PGUSER などの環境変数で指定する。DB を作れるロールで実行する。
 # 作った DB は最後に消す。
 set -euo pipefail
@@ -20,6 +20,10 @@ done
 # テストは最初の NG で止まる。止まったら psql が 0 以外で終わるので、その終了コードでも失敗を判定する
 status=0
 out=$("${psql[@]}" -d "$db" -f test/constraints.sql -f test/rules.sql 2>&1) || status=$?
+# 同時実行のテストは constraints.sql で作った行を使うので、通ったときだけ流す
+if [[ $status -eq 0 ]]; then
+  out+=$'\n'$(bash test/concurrency.sh "$db" 2>&1) || status=$?
+fi
 ok=$(grep -c 'OK:' <<<"$out" || true)
 ng=$(grep -E 'NG:|ERROR:' <<<"$out" || true)
 
