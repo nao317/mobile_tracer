@@ -16,6 +16,14 @@ A modern, production-ready template for building full-stack React applications u
 
 ## Getting Started
 
+### Run the complete system through Nginx
+
+From the repository root, run `bash scripts/init.sh`, then
+`docker compose up --build --wait --wait-timeout 180`.
+Open `http://localhost:8080/`; `/api/` requests on that origin go to the Go API.
+The frontend runs as a Node SSR server on internal port 3000.
+See the [root README](../README.md) for optional direct access with `compose.debug.yaml`.
+
 ### Installation
 
 Install the dependencies:
@@ -74,6 +82,16 @@ Put E2E tests in `e2e/*.spec.ts`. Playwright builds the application, starts the 
 server at `http://127.0.0.1:4173`, and stops it after testing. Keep port 4173 available;
 you do not need to start a server yourself. The initial E2E tests check the home page
 and the HTTP status and content of the 404 page.
+
+To run against the already started Compose environment through Nginx, set
+`PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npm run e2e`. This skips starting a local
+server and also checks same-origin API access from the browser. CI runs this in
+the integration job and uploads a separate `nginx-playwright-results` artifact.
+
+`npm start` runs `server.js`, which serves the production build using Express and
+the React Router adapter. `TRUSTED_PROXY_CIDRS` controls the trusted proxy address
+ranges for forwarded host, protocol and client IP information. It defaults to
+empty for direct local runs; Compose sets private IPv4 ranges for its local network.
 
 View the HTML report after a run:
 

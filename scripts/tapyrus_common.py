@@ -33,13 +33,13 @@ def rpc(method, *params):
         return output
 
 
-def backend_url():
-    address = compose("port", "backend", "8080")
+def application_url():
+    address = compose("port", "nginx", "8080")
     return "http://" + address
 
 
 def get_json(path):
-    with urllib.request.urlopen(backend_url() + path, timeout=10) as response:
+    with urllib.request.urlopen(application_url() + path, timeout=10) as response:
         if response.status != 200:
             raise RuntimeError(f"{path} returned HTTP {response.status}")
         return json.load(response)

@@ -6,15 +6,17 @@
     "build": "react-router build",
     "dev": "react-router dev",
     "lint": "eslint . --max-warnings 0",
-    "start": "react-router-serve ./build/server/index.js",
+    "start": "node server.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
+    "@react-router/express": "^8.5.0",
     "@react-router/node": "^8.5.0",
     "@react-router/serve": "^8.5.0",
+    "express": "^5.3.0",
     "isbot": "^5.1.36",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
