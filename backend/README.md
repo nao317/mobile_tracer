@@ -54,6 +54,20 @@ curl -i http://localhost:9000/api/health
 
 バックエンドはホストの `127.0.0.1` に公開します。コンテナ内のポートは8080固定です。
 
+## DB
+
+`docker compose up` で PostgreSQL 17（`db`）も起動し、`db-migrate` が `db/migrations` の未適用分を流して終了します。APIからDBへの接続はまだありません。DBのパスワードは `scripts/init.sh` が `.env` に作ります。
+
+```bash
+# マイグレーションの適用状況（version が最新の番号で、dirty が f なら正常）
+docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select * from schema_migrations"'
+
+# 制約のテスト。別のDBを作って流し、終わったら消す
+docker compose run --rm db-test
+```
+
+ホストの `127.0.0.1:5432` にも公開します。使用中の場合は `DB_PORT` で変えてください。テーブルの設計は[テーブル設計](../docs/schema/tables.md)を参照してください。
+
 ## 環境変数
 
 APIは起動時に環境変数を読み取ります。未設定または空文字の場合は既定値を使い、不正な値の場合はエラーを記録して終了します。`.env` ファイルをAPI自身が読み込む処理はありません。
@@ -109,6 +123,8 @@ backend/
 ├── internal/config/          # 環境変数の読取・検証
 ├── internal/server/          # Echo、ミドルウェア、ルーティング
 ├── internal/tapyrus/         # CoreのRPC・EsploraのRESTクライアント
+├── db/migrations/            # DBのマイグレーション（golang-migrate）
+├── db/test/                  # マイグレーションの確認（run.sh）
 ├── Dockerfile
 ├── go.mod
 └── go.sum

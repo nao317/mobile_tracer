@@ -207,6 +207,10 @@ jobs:
       - name: Check Tapyrus transaction
         run: python3 scripts/tapyrus-smoke.py
 
+      # マイグレーションを空のDBに流し直し、制約のテストをする。
+      - name: Check DB migrations
+        run: docker compose run --rm db-test
+
       - name: Check initialization is repeatable
         run: |
           before=$(docker compose exec -T backend /app/tapyrus-check)
