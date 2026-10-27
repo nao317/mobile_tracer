@@ -49,7 +49,7 @@ Esploraのヘルスチェックは、CoreとREST APIのジェネシス・最新�
 # API単体の稼働確認。Tapyrusが停止していても200を返します。
 curl -i http://localhost:8080/api/health
 
-# CoreとEsploraが同じチェーンの最新ブロックを参照できると200を返します。
+# DBに接続でき、CoreとEsploraが同じチェーンの最新ブロックを参照できると200を返します。
 curl -i http://localhost:8080/api/ready
 
 # Goコンテナから両方のAPIへ接続し、チェーン情報をJSONで表示します。
@@ -124,7 +124,7 @@ docker compose up --build --wait --wait-timeout 180
 | --- | --- |
 | RPCパスワードが未設定と表示される | 最初に `bash scripts/init.sh` を実行する |
 | ネットワークID・ウォレット名の不一致で止まる | 元の設定に戻すか、別のComposeプロジェクトを使用する |
-| `/api/ready` が503になる | `docker compose ps -a` と `docker compose logs --tail=100 tapyrusd esplora backend` で停止・索引の遅れ・接続エラーを調べる |
+| `/api/ready` が503になる | `docker compose ps -a` と `docker compose logs --tail=100 db tapyrusd esplora backend` でDB・Tapyrusの停止、索引の遅れ、接続エラーを調べる |
 | 索引が最新ブロックに追いつかない | Esploraのログを確認する。ブロック生成直後は索引の更新を待つ |
 | ホスト側のポートが使用中 | `.env` の `BACKEND_PORT` を変更して起動し直す |
 

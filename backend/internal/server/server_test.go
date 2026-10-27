@@ -123,7 +123,32 @@ func TestReadiness(t *testing.T) {
 			health := httptest.NewRecorder()
 			e.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/api/health", nil))
 			if health.Code != http.StatusOK {
-				t.Error("liveness must work even when Tapyrus is unavailable")
+				t.Error("liveness must work even when dependencies are unavailable")
+			}
+		})
+	}
+}
+
+func TestReadinessRequiresAllDependencies(t *testing.T) {
+	ok := func(context.Context) error { return nil }
+	fail := func(context.Context) error { return errors.New("dependency failed") }
+	for _, tt := range []struct {
+		name   string
+		checks []func(context.Context) error
+		want   int
+	}{
+		{"both ready", []func(context.Context) error{ok, ok}, http.StatusOK},
+		{"database unavailable", []func(context.Context) error{fail, ok}, http.StatusServiceUnavailable},
+		{"Tapyrus unavailable", []func(context.Context) error{ok, fail}, http.StatusServiceUnavailable},
+		{"Tapyrus unconfigured", []func(context.Context) error{ok, nil}, http.StatusServiceUnavailable},
+		{"no checks", nil, http.StatusServiceUnavailable},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := New(slog.New(slog.NewJSONHandler(io.Discard, nil)), tt.checks...)
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ready", nil))
+			if rec.Code != tt.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.want)
 			}
 		})
 	}
