@@ -8,6 +8,7 @@
 | --- | --- |
 | `docs/design.md` | 機能・非機能要件を中心とする要件定義書の編集原本 |
 | [docs/business-logic.md](business-logic.md) | 業務の流れ・判断ルール・現在の実装範囲を簡潔に説明する資料 |
+| [docs/api.md](api.md) | 実装済みAPIの入出力、権限、エラー、開発用データの導入と操作例 |
 | [docs/tapyrus.md](tapyrus.md) | Tapyrusのローカル環境の初期化・起動・接続確認・データ削除の手順 |
 | `docs/design.pdf` | 現行の原本と対応する最新版PDF |
 | `docs/pdf/design-v<版>-<YYYYMMDDTHHMMSS>-JST.pdf` | 各改訂時点のPDF。日時は日本時間、過去版は上書きしない |
