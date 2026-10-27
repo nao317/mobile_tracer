@@ -22,7 +22,7 @@ python3 scripts/smoke.py
 
 ```bash
 export COMPOSE_PROJECT_NAME=mobile-tracer-dev2
-export BACKEND_PORT=8081
+export NGINX_PORT=8081
 bash scripts/init.sh
 docker compose up --build --wait --wait-timeout 180
 ```
@@ -36,12 +36,14 @@ docker compose up --build --wait --wait-timeout 180
 | `tapyrus-bootstrap` | ウォレットの作成・読込と検証用コインの準備。完了後に終了 | CoreのRPCを利用 |
 | `esplora` | Esplora `v0.5.8`。ブロック・トランザクションを索引化 | `http://esplora:3000`（REST） |
 | `backend` | Go APIと接続確認コマンド | `http://backend:8080` |
+| `frontend` | React RouterのSSRサーバー | `http://frontend:3000` |
+| `nginx` | 画面とAPIへのHTTP転送 | `http://nginx:8080` |
 
 CoreとEsploraはタグとイメージのダイジェストを固定しています。Esploraには、Goの接続確認コマンドを追加したイメージを使います。RPC経由で索引を作るため、Esploraにウォレットや署名鍵の保存先はマウントしません。
 
-ホストに公開するのはGo APIの `127.0.0.1:8080` のみです。CoreとEsploraへの確認コマンドはCompose内で実行します。
+通常ホストに公開するのはNginxの `127.0.0.1:8080` のみです。CoreとEsploraへの確認コマンドはCompose内で実行します。API・DBへの直接接続には、[ルートREADME](../README.md)の開発用Compose設定を使います。
 
-Esploraのヘルスチェックは、CoreとREST APIのジェネシス・最新ブロックの一致まで確認します。その成功後にGo APIを起動します。通常の起動順は、初期化 → Core → ウォレット・コイン準備 → Esplora → Go APIです。
+Esploraのヘルスチェックは、CoreとREST APIのジェネシス・最新ブロックの一致まで確認します。その成功とDBマイグレーションの完了後にGo APIを起動します。フロントとGo APIのヘルスチェック成功後にNginxを起動します。
 
 ## 接続確認とテスト
 
@@ -83,7 +85,7 @@ Composeはルートの `.env` を読み取ります。`.env` はGitの管理対�
 | `TAPYRUS_RPC_PASSWORD` | 初期化時に生成 | CoreのRPCパスワード |
 | `TAPYRUS_WALLET` | `mobile-tracer` | 開発用ウォレット名 |
 | `TAPYRUS_TIMEOUT` | `5s` | Goの接続確認全体の上限時間 |
-| `BACKEND_PORT` | `8080` | ホスト側に公開するGo APIのポート |
+| `NGINX_PORT` | `8080` | ホスト側に公開するNginxのポート |
 | `COMPOSE_PROJECT_NAME` | Composeの既定値 | 別環境のコンテナ・ボリュームを分けるプロジェクト名 |
 
 RPCユーザー名・パスワード・ウォレット名には英数字、`_`、`-` を使用します。ネットワークID・ウォレット名は、初期化後に同じボリュームで変更できません。
@@ -126,10 +128,10 @@ docker compose up --build --wait --wait-timeout 180
 | ネットワークID・ウォレット名の不一致で止まる | 元の設定に戻すか、別のComposeプロジェクトを使用する |
 | `/api/ready` が503になる | `docker compose ps -a` と `docker compose logs --tail=100 db tapyrusd esplora backend` でDB・Tapyrusの停止、索引の遅れ、接続エラーを調べる |
 | 索引が最新ブロックに追いつかない | Esploraのログを確認する。ブロック生成直後は索引の更新を待つ |
-| ホスト側のポートが使用中 | `.env` の `BACKEND_PORT` を変更して起動し直す |
+| ホスト側のポートが使用中 | `.env` の `NGINX_PORT` を変更して起動し直す |
 
 ## 実装の対象範囲
 
-この環境はCoreのRPCとEsploraのREST APIへの接続・検証を対象とします。写真・記録のハッシュ登録を行う業務API、PostgreSQLへの登録状態の保存・再試行管理、Explorer画面、Nginx、本番ネットワークと本番用の鍵管理は別Issueで対応します。
+この環境はNginx経由の画面・APIアクセスと、CoreのRPC・EsploraのREST APIへの接続・検証を対象とします。写真・記録のハッシュ登録を行う業務API、PostgreSQLへの登録状態の保存・再試行管理、Explorer画面、本番ネットワークと本番用の鍵管理は別Issueで対応します。
 
 構成は[tapyrus-explorerのCompose](https://github.com/chaintope/tapyrus-explorer/blob/master/docker-compose.yml)、開発モードとブロック生成は[Tapyrus Coreの手順](https://github.com/chaintope/tapyrus-core/blob/master/doc/tapyrus/getting_started.md#how-to-start-tapyrus-in-dev-mode)、照会は[EsploraのAPI仕様](https://github.com/chaintope/esplora-tapyrus/blob/main/doc/API.md)を参考にしています。

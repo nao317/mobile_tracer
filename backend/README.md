@@ -1,13 +1,13 @@
 # バックエンドAPI
 
-Go・Echoで動くAPIです。`GET /api/health` はAPI単体の稼働を確認し、HTTP 200と `{"status":"ok"}` を返します。`GET /api/ready` はPostgreSQLへの接続と、Tapyrus Core・Esploraの接続・索引の準備状態を確認します。業務APIとNginx経由のアクセスは別Issueで実装します。
+Go・Echoで動くAPIです。`GET /api/health` はAPI単体の稼働を確認し、HTTP 200と `{"status":"ok"}` を返します。`GET /api/ready` はPostgreSQLへの接続と、Tapyrus Core・Esploraの接続・索引の準備状態を確認します。ComposeではNginx経由でアクセスします。業務APIは別Issueで実装します。
 
 ## ローカルで起動する
 
 Go 1.27.3以上を用意し、リポジトリルートから実行します。初回は `bash scripts/init.sh` で `.env` を準備してください。先にDBを起動し、接続情報を環境変数へ読み込みます。
 
 ```bash
-docker compose up -d --wait db
+docker compose -f compose.yaml -f compose.debug.yaml up -d --wait db
 docker compose run --rm db-migrate
 # scripts/init.sh が生成したローカル開発用 .env を読み込む
 set -a
@@ -54,11 +54,11 @@ Tapyrusの構成・初期化・検証用トランザクション・データ削�
 ホスト側の8080番ポートが使用中の場合は、公開ポートを変更できます。
 
 ```bash
-BACKEND_PORT=9000 docker compose up --build --wait backend
+NGINX_PORT=9000 docker compose up --build --wait --wait-timeout 180
 curl -i http://localhost:9000/api/health
 ```
 
-バックエンドはホストの `127.0.0.1` に公開します。コンテナ内のポートは8080固定です。
+通常はNginxだけをホストに公開します。APIへ直接接続する場合は `docker compose -f compose.yaml -f compose.debug.yaml up --build --wait --wait-timeout 180` を使い、`http://localhost:8081/api/health` で確認します。コンテナ内のAPIポートは8080固定です。
 
 ## DB
 
@@ -76,7 +76,7 @@ docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "sel
 docker compose run --rm db-test
 ```
 
-ホストの `127.0.0.1:5432` にも公開します。使用中の場合は `DB_PORT` で変えてください。テーブルの設計は[テーブル設計](../docs/schema/tables.md)を参照してください。
+開発用の `compose.debug.yaml` を重ねた場合は、DBをホストの `127.0.0.1:5432` にも公開します。使用中の場合は `DB_PORT` で変えてください。テーブルの設計は[テーブル設計](../docs/schema/tables.md)を参照してください。
 
 ## 環境変数
 
@@ -86,11 +86,13 @@ APIは起動時に環境変数を読み取ります。必須項目が空の場�
 | --- | --- | --- |
 | `PORT` | `8080` | APIの待受ポート。1〜65535の整数。すべてのネットワークインターフェースで待ち受けます。Composeでは8080に固定します。 |
 | `SHUTDOWN_TIMEOUT` | `10s` | 終了時に処理中のリクエストを待つ上限。`time.ParseDuration` で解釈できる正の値（例: `5s`、`1m`）。Composeでも指定できます。 |
-| `BACKEND_PORT` | `8080` | Compose専用。ホストに公開するポート。 |
+| `NGINX_PORT` | `8080` | Compose専用。Nginxのホスト公開ポート。 |
+| `BACKEND_DEBUG_PORT` | `8081` | 開発用Compose設定でAPIを直接公開するポート。 |
+| `TRUSTED_PROXY_CIDRS` | 空 | 転送ヘッダーを信頼する接続元のCIDRをカンマ区切りで指定。ComposeではプライベートIPv4範囲を補います。 |
 | `BACKEND_STOP_GRACE_PERIOD` | `15s` | Compose専用。停止時にコンテナを強制終了するまでの猶予。`SHUTDOWN_TIMEOUT` より長く設定してください。 |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | 必須 | DB名・ユーザー・パスワード。ComposeではDB名に `mobile_tracer`、ユーザーに `mobiletracer` を補います。 |
 | `DB_HOST` | `localhost` | DB接続先。ComposeのAPI内では `db` に固定します。 |
-| `DB_PORT` | `5432` | DB接続先のポート。Composeではホスト公開用にも使い、API内の接続先は5432に固定します。 |
+| `DB_PORT` | `5432` | DB接続先のポート。開発用Compose設定ではホスト公開用にも使い、API内の接続先は5432に固定します。 |
 | `DB_SSLMODE` | `disable` | PostgreSQLのSSLモード。ローカル開発の既定値です。Compose内では `disable` に固定します。TLS接続では `verify-full` など環境に合う値を指定してください。 |
 | `DB_TIMEOUT` | `3s` | 起動時・準備状態のDB接続確認の上限。正の時間を指定します。 |
 | `DB_MAX_OPEN_CONNS` | `10` | APIプロセスごとの最大接続数。1以上の整数。 |
@@ -104,6 +106,8 @@ APIは起動時に環境変数を読み取ります。必須項目が空の場�
 Tapyrusの両接続先を省略しても、DBの設定と接続は必要です。この場合は `/api/health` が200、`/api/ready` が503を返します。Tapyrusも利用する場合は両URLと認証情報を揃えてください。
 
 準備状態はDB、Tapyrusの順に確認するため、全体の待機時間は最大で `DB_TIMEOUT + TAPYRUS_TIMEOUT` です。ComposeのAPIヘルスチェックは10秒で打ち切ります。確認時間を増やす場合は、この値も余裕を持って調整してください。
+
+NginxはHost・`X-Real-IP`・`X-Forwarded-For`・`X-Forwarded-Proto`を設定します。Goは `TRUSTED_PROXY_CIDRS` に含まれる接続元の `X-Real-IP` と通信方式を採用します。空の場合は接続自体のIPと通信方式を使います。Nginxの応答待機時間は15秒です。APIの接続確認時間を増やす場合は、こちらも調整してください。
 
 ローカルでの指定例です。
 

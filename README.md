@@ -1,8 +1,40 @@
 # mobile tracer
 
-## バックエンドAPIを起動する
+## システムを起動する
 
-Go・EchoのAPIは `backend` ディレクトリにあります。初回はリポジトリルートで `bash scripts/init.sh` を実行し、続いて `docker compose up --build --wait --wait-timeout 180` でGo API・Tapyrus Core・Esploraを起動します。`curl -i http://localhost:8080/api/health` でHTTP 200と `{"status":"ok"}` を確認できます。
+初回はリポジトリルートで次を実行します。Nginx、React RouterのSSRサーバー、Go API、PostgreSQL、Tapyrus Core・Esploraが起動します。
+
+```bash
+bash scripts/init.sh
+docker compose up --build --wait --wait-timeout 180
+python3 scripts/smoke.py
+python3 scripts/nginx-smoke.py
+```
+
+画面は `http://localhost:8080/`、APIは `http://localhost:8080/api/health` など、同じオリジンで利用できます。Nginxが `/api` と `/api/` 配下をGo APIへ、それ以外をReact Routerへ転送します。パス・クエリ文字列・HTTPステータスは維持します。公開ポートはNginxの `127.0.0.1:8080` のみです。変更する場合は `.env` の `NGINX_PORT` を指定してください。
+
+`/nginx-health` はNginx自身の稼働、`/api/health` はGo APIの稼働、`/api/ready` はDB・Tapyrusを含む準備状態を確認します。NginxはフロントとAPIのヘルスチェック成功後に起動します。
+
+### 開発時に直接接続する
+
+通常のCompose設定では、API・フロント・DBは内部ネットワークから接続します。ホストから直接接続する場合は開発用の設定を重ねます。
+
+```bash
+docker compose -f compose.yaml -f compose.debug.yaml up --build --wait --wait-timeout 180
+```
+
+| 接続先 | URL・ポート | 変更する変数 |
+| --- | --- | --- |
+| Nginx | `http://localhost:8080` | `NGINX_PORT` |
+| Go APIへの直接接続 | `http://localhost:8081` | `BACKEND_DEBUG_PORT` |
+| フロントへの直接接続 | `http://localhost:3000` | `FRONTEND_DEBUG_PORT` |
+| PostgreSQL | `127.0.0.1:5432` | `DB_PORT` |
+
+開発用の公開を解除するには、通常の `docker compose up -d --wait --wait-timeout 180` でサービスを更新します。停止・削除も、起動に使ったComposeファイルの組み合わせで実行してください。旧設定の `BACKEND_PORT` は使用しません。
+
+NginxはHost（ポートを含む）、接続元IP、通信方式を転送します。クライアントが送った転送ヘッダーはNginxで上書きします。Go・SSRサーバーの `TRUSTED_PROXY_CIDRS` には、このローカルComposeで使うプライベートIPv4範囲を設定しています。Compose外で直接起動する場合の既定値は空で、転送ヘッダーを信頼しません。本番で使う場合は、実際のプロキシのアドレス範囲に合わせて指定します。
+
+今回の構成はローカルHTTP用です。HTTPSと複数台への負荷分散は今後追加します。
 
 Goを使ったローカル起動、環境変数、テストの実行方法は[バックエンドのREADME](backend/README.md)を参照してください。
 
@@ -22,7 +54,7 @@ Tapyrusの初期化、接続確認、検証用送金、停止・データ削除�
 
 React Router、Go、PostgreSQL、Tapyrus APIをそれぞれDockerコンテナで動かし、NginxでHTTPリクエストの振り分けをまとめて管理する構成を採用します。開発環境ではDocker Composeで各サービスを起動する方針です。
 
-現在はフロントエンドの開発環境・CI、Go・EchoのAPI基盤、PostgreSQLのスキーマ・API接続と、Tapyrus Core・Esploraのローカル開発環境を用意しています。以下には、今後導入する技術を含めた設計方針を記載します。
+現在はNginx経由の画面・APIへのアクセス、フロントエンドの開発環境・CI、Go・EchoのAPI基盤、PostgreSQLのスキーマ・API接続と、Tapyrus Core・Esploraのローカル開発環境を用意しています。以下には、今後導入する技術を含めた設計方針を記載します。
 
 ### 技術構成図
 
@@ -31,8 +63,8 @@ React Router、Go、PostgreSQL、Tapyrus APIをそれぞれDockerコンテナで
 ```mermaid
 flowchart TB
     browser["ブラウザー"]
-    subgraph compose["Docker Composeで管理する構成（導入予定）"]
-        nginx["Nginx<br/>HTTPリクエストの転送・負荷分散"]
+    subgraph compose["Docker Composeで管理する構成"]
+        nginx["Nginx<br/>HTTPリクエストの転送"]
         frontend["React Router・React・TypeScript<br/>入力検証: Zod"]
         api1["Go API<br/>Echo・GORM・goroutine"]
         api2["Go API 2台目<br/>必要に応じて追加"]
@@ -262,13 +294,13 @@ PRのタイトルは、何を変更するかが分かる短い文にします。
 | `detect` | Go API・結合テストに必要な実装の有無を確認 | 毎回実行 |
 | `e2e` | Chromiumを準備し、本番ビルドに対してPlaywrightを実行 | 毎回実行 |
 | `backend` | Goの整形確認、静的解析、データ競合を検出するテスト、APIのビルド | GoモジュールとAPIのエントリーポイントがある場合 |
-| `integration` | Go API・Core・Esploraの起動、接続・送金・承認・再起動後のデータ保持・初期化の再実行を確認 | 必要なファイルが揃い、backendが成功した場合 |
+| `integration` | 全サービスの起動、Nginx経由の画面・API・ブラウザー操作、DB障害復旧・制約、Tapyrus送金・承認・データ保持、初期化の再実行を確認 | 必要なファイルが揃い、backendが成功した場合 |
 
 `quality`・`e2e`・`detect`は並列で動きます。`backend`は`detect`の判定後に実行されます。
 
 `integration`は`backend`の成功後に、フロントエンドの検証と独立して実行します。必要なファイルの存在も確認し、ワークフローがキャンセルされた場合は実行しません。
 
-Playwrightのレポートと、失敗時のスクリーンショット・トレースは、`e2e`ジョブの成果物`playwright-results`として7日間保存します。ローカルでの実行手順は[フロントエンドのREADME](frontend/README.md#testing)を参照してください。
+Playwrightのレポートと、失敗時のスクリーンショット・トレースは、`e2e`ジョブの成果物`playwright-results`と、`integration`ジョブの`nginx-playwright-results`として7日間保存します。ローカルでの実行手順は[フロントエンドのREADME](frontend/README.md#testing)を参照してください。
 
 Node.jsを使うジョブでは、24.22.1以上・25未満の範囲で最新のバージョンを取得します。依存パッケージは`frontend/package-lock.json`に従ってインストールします。
 
@@ -276,12 +308,17 @@ Node.jsを使うジョブでは、24.22.1以上・25未満の範囲で最新の�
 
 ```text
 compose.yaml
+docker/nginx/default.conf
+frontend/Dockerfile
+frontend/server.js
 backend/Dockerfile
 backend/cmd/tapyrus-check/main.go
 docker/tapyrus/init.sh
 docker/tapyrus/bootstrap.sh
 scripts/init.sh
 scripts/smoke.py
+scripts/nginx-smoke.py
+scripts/db-smoke.py
 scripts/tapyrus-smoke.py
 ```
 
@@ -290,4 +327,4 @@ scripts/tapyrus-smoke.py
 
 ### 今後追加する検証
 
-各サービスの導入に合わせて、CIの検証も追加します。結合テストではNginx経由で各サービスの接続を確認できるようにします。負荷テストは、環境と負荷条件を揃えて実行できる手動・定期実行用のジョブを検討します。
+業務APIの追加に合わせて、Nginx経由の結合テストを増やします。負荷テストは、環境と負荷条件を揃えて実行できる手動・定期実行用のジョブを検討します。
