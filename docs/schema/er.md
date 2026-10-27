@@ -235,6 +235,7 @@ erDiagram
     uuid base_version_id FK
     uuid target_version_id FK
     text spot_key
+    integer revision_no "大きいほど新しい判定"
     text judgement "no_change / changed / not_comparable"
   }
 ```
@@ -318,6 +319,7 @@ erDiagram
     text confirmation_type "view / receipt / condition_agreement / work_approval"
     text statement_key
     integer statement_version
+    text statement_text "見せた文面そのもの"
     timestamptz due_at
     uuid objection_id FK
     timestamptz withdrawn_at
@@ -409,7 +411,6 @@ erDiagram
     uuid anchor_id FK
     integer attempt_no
     text kind "submit / lookup"
-    text idempotency_key
     text outcome "succeeded / failed / timeout / not_found"
   }
   verification_runs {

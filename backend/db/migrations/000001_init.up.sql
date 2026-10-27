@@ -2,7 +2,13 @@
 -- 要件定義書 v0.2.0 をもとにした案。共有の DB に流すまでは、このファイルを直接直してよい。
 -- 説明と書き方の決まりは docs/schema/tables.md、ER 図は docs/schema/er.md を参照。
 -- PostgreSQL 14 以上を想定（gen_random_uuid を使う）。
--- ファイル全体を一度に実行すると、PostgreSQL は一つのトランザクションとして扱う。途中で失敗しても何も残らない。
+-- このファイルは一つのトランザクションの中で流す。開始と終了は流すツールに任せ、ファイルには BEGIN と COMMIT を書かない。
+-- golang-migrate はファイル全体を一度に送るので、一つのトランザクションになる。psql で流すときは次のようにする。
+--   psql -X -v ON_ERROR_STOP=1 --single-transaction -f このファイル
+--
+-- 顧客や案件が食い違わないよう複合外部キーで確かめるため、親からたどれる tenant_id と case_id も子の表に持たせる。
+-- objection_items.record_version_id と confirmation_responses.confirmation_type も、
+-- 参照先との一致を DB で確かめるために、親と同じ値を重ねて持つ。
 
 CREATE SCHEMA app;        -- 業務データ
 CREATE SCHEMA integrity;  -- 検証基準と照合結果。業務データと権限を分ける（NFR-03）
@@ -51,6 +57,15 @@ BEGIN
       RAISE EXCEPTION '%.% には提出済みの記録版だけを指定できます', TG_TABLE_NAME, col;
     END IF;
   END LOOP;
+  RETURN NEW;
+END $$;
+
+-- 作るときの状態を引数の値に限る。途中の状態の行をいきなり作らせない
+CREATE FUNCTION app.require_initial_status() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.status IS DISTINCT FROM TG_ARGV[0] THEN
+    RAISE EXCEPTION '%.% は status = % で作ってください', TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_ARGV[0];
+  END IF;
   RETURN NEW;
 END $$;
 
@@ -135,10 +150,14 @@ CREATE TABLE app.staff_role_assignments (
   CHECK ((revoked_by IS NULL) = (revoked_at IS NULL))
 );
 
--- 有効な付与は、同じ人・役割・店舗で1つまで（store_id の NULL も同じ値として比べる）
-CREATE UNIQUE INDEX staff_role_assignments_active
-  ON app.staff_role_assignments (staff_id, role, coalesce(store_id, '00000000-0000-0000-0000-000000000000'))
-  WHERE revoked_at IS NULL;
+-- 有効な付与は、同じ人・役割・店舗で1つまで。PostgreSQL 14 では NULL どうしを同じ値として比べられないので、
+-- 店舗を指定する付与と全店舗の付与でインデックスを分ける
+CREATE UNIQUE INDEX staff_role_assignments_active_store
+  ON app.staff_role_assignments (staff_id, role, store_id)
+  WHERE revoked_at IS NULL AND store_id IS NOT NULL;
+CREATE UNIQUE INDEX staff_role_assignments_active_all_stores
+  ON app.staff_role_assignments (staff_id, role)
+  WHERE revoked_at IS NULL AND store_id IS NULL;
 
 CREATE TRIGGER staff_role_assignments_columns
   BEFORE UPDATE ON app.staff_role_assignments
@@ -242,6 +261,9 @@ BEGIN
   RAISE EXCEPTION '反映済みの構成版は変更・削除できません';
 END $$;
 
+CREATE TRIGGER configuration_versions_initial_status
+  BEFORE INSERT ON app.configuration_versions
+  FOR EACH ROW EXECUTE FUNCTION app.require_initial_status('draft');
 CREATE TRIGGER configuration_versions_columns
   BEFORE UPDATE ON app.configuration_versions
   FOR EACH ROW EXECUTE FUNCTION app.allow_columns('status', 'settings', 'published_by', 'published_at');
@@ -311,6 +333,9 @@ CREATE TABLE app.import_jobs (
 CREATE UNIQUE INDEX import_jobs_committed_file
   ON app.import_jobs (tenant_id, file_sha256) WHERE status = 'committed';
 
+CREATE TRIGGER import_jobs_initial_status
+  BEFORE INSERT ON app.import_jobs
+  FOR EACH ROW EXECUTE FUNCTION app.require_initial_status('trial');
 CREATE TRIGGER import_jobs_columns
   BEFORE UPDATE ON app.import_jobs
   FOR EACH ROW EXECUTE FUNCTION app.allow_columns('status', 'confirmed_by', 'confirmed_at', 'committed_at');
@@ -341,7 +366,8 @@ CREATE TRIGGER import_job_rows_fixed
 -- 関係者と車両（FR-C02、FR-C18）
 -- ---------------------------------------------------------------
 
--- 顧客、依頼者、購入者など社外の人・会社。個人情報はこの表にまとめる
+-- 顧客、依頼者、購入者など社外の人・会社。氏名・連絡先などの基本情報をこの表にまとめる。
+-- 写真、自由記述、署名、本人控え、確認依頼の文面にも個人情報が含まれ得るので、削除の対象はこの表のほかも含めて管理する
 CREATE TABLE app.parties (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id       uuid NOT NULL REFERENCES app.tenants (id),
@@ -699,7 +725,9 @@ CREATE TRIGGER record_versions_configuration
   FOR EACH ROW EXECUTE FUNCTION app.require_case_configuration();
 
 -- 記録版にぶら下がる行（項目の値、写真、傷、撮影できなかった箇所）は、親が下書きのあいだだけ変えられる
--- 親を FOR SHARE で読むので、提出の処理と同時に書き込まれることはない
+-- 親を FOR SHARE で読むので、提出の処理と同時に書き込まれることはない。
+-- そのため提出する側（Go）は、項目や写真を読む前に、同じトランザクションで記録版を SELECT ... FOR UPDATE してから
+-- 状態と lock_version の確認、子の読み出しと検証、ハッシュの計算、submitted への更新の順に進める
 CREATE FUNCTION app.guard_version_child() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   st text;
@@ -883,7 +911,8 @@ CREATE TRIGGER capture_exceptions_columns
   FOR EACH ROW EXECUTE FUNCTION app.allow_columns('reason', 'approved_by', 'approved_at');
 
 -- 二つの提出版の同じ箇所を比べた、担当者の判定（FR-C06）。MVP では同じ案件の中だけ
--- 判定を直すときも上書きせず行を足す。いまの判定は一番新しい行
+-- 判定を直すときも上書きせず、revision_no を一つ増やした行を足す。いまの判定は revision_no が一番大きい行。
+-- created_at は同じトランザクションの中では同じ値になるので、順番には使わない
 CREATE TABLE app.record_comparisons (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id          uuid NOT NULL,
@@ -891,6 +920,7 @@ CREATE TABLE app.record_comparisons (
   base_version_id    uuid NOT NULL,
   target_version_id  uuid NOT NULL,
   spot_key           text NOT NULL,
+  revision_no        integer NOT NULL CHECK (revision_no > 0),
   judgement          text NOT NULL CHECK (judgement IN ('no_change', 'changed', 'not_comparable')),
   reason             text NOT NULL,  -- 判定の根拠。比べられないときはその理由
   created_by         uuid NOT NULL,
@@ -898,11 +928,10 @@ CREATE TABLE app.record_comparisons (
   FOREIGN KEY (tenant_id, case_id, base_version_id) REFERENCES app.record_versions (tenant_id, case_id, id),
   FOREIGN KEY (tenant_id, case_id, target_version_id) REFERENCES app.record_versions (tenant_id, case_id, id),
   FOREIGN KEY (tenant_id, created_by) REFERENCES app.staff_members (tenant_id, id),
-  CHECK (base_version_id <> target_version_id)
+  CHECK (base_version_id <> target_version_id),
+  -- 同時に直そうとした片方はここで止まる
+  CONSTRAINT record_comparisons_revision UNIQUE (base_version_id, target_version_id, spot_key, revision_no)
 );
-
-CREATE INDEX record_comparisons_pair
-  ON app.record_comparisons (base_version_id, target_version_id, spot_key, created_at);
 
 CREATE TRIGGER record_comparisons_submitted
   BEFORE INSERT ON app.record_comparisons
@@ -1008,7 +1037,7 @@ CREATE TRIGGER objection_evidence_fixed
 -- 確認の依頼と回答（FR-C08、FR-C14）
 -- ---------------------------------------------------------------
 
--- 関係者への確認の依頼。何を確認してもらうか（種類、文面の版、対象の記録版）を固定する
+-- 関係者への確認の依頼。何を確認してもらうか（種類、文面、対象の記録版）を固定する
 -- 見積の内容と金額は対象の記録版に入っているので、ここには持たない
 CREATE TABLE app.confirmation_requests (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1018,9 +1047,14 @@ CREATE TABLE app.confirmation_requests (
   participant_id     uuid NOT NULL,
   confirmation_type  text NOT NULL
                      CHECK (confirmation_type IN ('view', 'receipt', 'condition_agreement', 'work_approval')),
+  -- statement_key と statement_version は文面の出どころ。statement_text は相手に見せた文面そのもので、
+  -- 差し込む項目を埋めた状態で入れる。あとで文面の元を直しても、当時何を見せたかが分かる
   statement_key      text NOT NULL,
-  statement_version  integer NOT NULL,
-  due_at             timestamptz,
+  statement_version  integer NOT NULL CONSTRAINT confirmation_requests_statement_version_positive
+                     CHECK (statement_version > 0),
+  statement_text     text NOT NULL CONSTRAINT confirmation_requests_statement_text_not_blank
+                     CHECK (btrim(statement_text) <> ''),
+  due_at            timestamptz,
   objection_id       uuid,  -- 異議を受けて出し直した再確認なら、その異議
   created_by         uuid NOT NULL,
   created_at         timestamptz NOT NULL DEFAULT now(),
@@ -1058,7 +1092,8 @@ CREATE TABLE app.confirmation_responses (
   tenant_id              uuid NOT NULL,
   case_id                uuid NOT NULL,
   request_id             uuid NOT NULL,
-  -- 依頼の種類の写し。種類ごとに選べる答えを CHECK で絞るために持つ
+  -- 依頼の種類の写し。依頼と同じ種類であることを外部キーで確かめ、種類ごとに選べる答えを CHECK で絞るために持つ。
+  -- 消すと、同じ確かめをトリガーに移すことになる
   confirmation_type      text NOT NULL,
   answer                 text NOT NULL,
   proxy_by               uuid,
@@ -1176,7 +1211,10 @@ CREATE TABLE app.share_grants (
   CHECK (accepted_at IS NULL OR recipient_tenant_id IS NOT NULL),
   CHECK (accepted_at IS NULL OR issued_at IS NOT NULL),
   CHECK ((accepted_by IS NULL) = (accepted_at IS NULL)),
-  CHECK (num_nonnulls(revoked_by, revoked_at, revoke_reason) IN (0, 3))
+  CHECK (num_nonnulls(revoked_by, revoked_at, revoke_reason) IN (0, 3)),
+  -- 発行日時は期限より前にする。発行する時点で期限が切れていないかはトリガーで、
+  -- 受け入れのときに期限が切れていないかは Go 側で確かめる
+  CONSTRAINT share_grants_expiry_after_issue CHECK (issued_at IS NULL OR issued_at < expires_at)
 );
 
 -- 発行前の状態で作り、範囲を決めてから発行する。発行と受け入れは一度だけ。
@@ -1184,7 +1222,7 @@ CREATE TABLE app.share_grants (
 CREATE FUNCTION app.guard_share_grant() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    IF NEW.issued_at IS NOT NULL THEN
+    IF num_nonnulls(NEW.issued_at, NEW.accepted_at, NEW.revoked_at) <> 0 THEN
       RAISE EXCEPTION '共有は発行前の状態で作ってから発行してください';
     END IF;
     RETURN NEW;
@@ -1199,6 +1237,10 @@ BEGIN
     SELECT 1 FROM app.share_grant_targets WHERE share_grant_id = NEW.id
   ) THEN
     RAISE EXCEPTION '共有する記録版がない共有は発行できません';
+  END IF;
+  -- issued_at は呼び出し側が入れるので、さかのぼった日時でも通らないよう DB の時刻で比べる
+  IF OLD.issued_at IS NULL AND NEW.issued_at IS NOT NULL AND now() >= NEW.expires_at THEN
+    RAISE EXCEPTION '期限が切れた共有は発行できません';
   END IF;
   RETURN NEW;
 END $$;
@@ -1373,6 +1415,7 @@ CREATE TRIGGER deletion_requests_no_delete
 
 -- 提出版の検証基準と、外部（チェーンなど）への登録の状態
 CREATE TABLE integrity.anchors (
+  -- 登録の操作を表す ID。登録先が冪等キーを受け付けるなら、再試行でもこの値を送る
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id          uuid NOT NULL,
   case_id            uuid NOT NULL,
@@ -1395,6 +1438,9 @@ CREATE TABLE integrity.anchors (
   CHECK (status <> 'registered' OR external_ref IS NOT NULL)
 );
 
+CREATE TRIGGER anchors_initial_status
+  BEFORE INSERT ON integrity.anchors
+  FOR EACH ROW EXECUTE FUNCTION app.require_initial_status('unregistered');
 CREATE TRIGGER anchors_submitted
   BEFORE INSERT ON integrity.anchors
   FOR EACH ROW EXECUTE FUNCTION app.require_submitted('record_version_id');
@@ -1404,21 +1450,38 @@ CREATE TRIGGER anchors_columns
 CREATE TRIGGER anchors_registered
   BEFORE UPDATE ON integrity.anchors
   FOR EACH ROW WHEN (OLD.status = 'registered') EXECUTE FUNCTION app.reject_change();
+
+-- 照合は registered の基準だけを信じるので、成功した試行がないまま registered にはできない
+-- 照会（lookup）で登録が見つかった場合も成功に数える
+CREATE FUNCTION app.require_succeeded_attempt() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM integrity.anchor_attempts WHERE anchor_id = NEW.id AND outcome = 'succeeded'
+  ) THEN
+    RAISE EXCEPTION '成功した試行がない検証基準は registered にできません';
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER anchors_succeeded_attempt
+  BEFORE UPDATE ON integrity.anchors
+  FOR EACH ROW WHEN (NEW.status = 'registered' AND OLD.status <> 'registered')
+  EXECUTE FUNCTION app.require_succeeded_attempt();
 CREATE TRIGGER anchors_no_delete
   BEFORE DELETE ON integrity.anchors
   FOR EACH ROW EXECUTE FUNCTION app.reject_change();
 
 -- 登録と照会の試行。送る前に行を作り、結果が分かったら埋める
 -- 再起動しても、結果の分からない試行が残っていれば再送の前に照会できる
+-- 同じ登録の再試行は anchors.id で、一回ごとの試行はこの表の id で見分ける
 CREATE TABLE integrity.anchor_attempts (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id        uuid NOT NULL,
   case_id          uuid NOT NULL,
   anchor_id        uuid NOT NULL,
-  attempt_no       integer NOT NULL,
+  attempt_no       integer NOT NULL CONSTRAINT anchor_attempts_attempt_no_positive CHECK (attempt_no > 0),
   kind             text NOT NULL CHECK (kind IN ('submit', 'lookup')),
-  idempotency_key  text NOT NULL UNIQUE,
-  outcome          text CHECK (outcome IN ('succeeded', 'failed', 'timeout', 'not_found')),
+  outcome       text CHECK (outcome IN ('succeeded', 'failed', 'timeout', 'not_found')),
   response         jsonb,  -- 登録先の応答をそのまま残す
   created_at       timestamptz NOT NULL DEFAULT now(),
   finished_at      timestamptz,
@@ -1436,7 +1499,6 @@ CREATE TRIGGER anchor_attempts_finished
 CREATE TRIGGER anchor_attempts_no_delete
   BEFORE DELETE ON integrity.anchor_attempts
   FOR EACH ROW EXECUTE FUNCTION app.reject_change();
-
 -- 照合の結果。だれが実行したかは audit.events に残す
 -- 基準がない・未登録・原本削除のときは unverifiable にして、一致とは扱わない
 CREATE TABLE integrity.verification_runs (
@@ -1520,7 +1582,7 @@ BEGIN
   FOR t IN
     SELECT n.nspname, c.relname
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE c.relkind = 'r' AND n.nspname IN ('app', 'integrity', 'audit')
+     WHERE c.relkind IN ('r', 'p') AND n.nspname IN ('app', 'integrity', 'audit')
   LOOP
     EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON %I.%I '
                    'FOR EACH STATEMENT EXECUTE FUNCTION app.reject_change()',

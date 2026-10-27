@@ -1,6 +1,6 @@
 -- マイグレーションで作った制約とトリガーが意図どおり効くかを確かめる。
--- 期待どおりなら "OK:" の行だけが出る。"NG:" が出たら直す。run.sh から流す。
-\set ON_ERROR_STOP 0
+-- 期待どおりなら "OK:" の行だけが出る。期待と違えば "NG:" のエラーで止まる。run.sh から流す。
+\set ON_ERROR_STOP on
 SET client_min_messages = warning;
 
 CREATE FUNCTION pg_temp.u(x text) RETURNS uuid LANGUAGE sql IMMUTABLE AS $$
@@ -9,29 +9,44 @@ $$;
 
 -- expect には、止めるはずの制約の名前か、トリガーのエラー文を書く。
 -- 参照先の行がない、列名を間違えたなど、違う理由で止まったときも NG にする。
+-- 止まった処理はロールバックされるので、ここで作った行を後のテストで使わない。
 CREATE FUNCTION pg_temp.ng(label text, expect text, sql text) RETURNS void LANGUAGE plpgsql AS $$
 DECLARE
   state text;
   name text;
   msg text;
 BEGIN
-  EXECUTE sql;
-  RAISE WARNING 'NG: % はエラーになるはずが通った', label;
-EXCEPTION WHEN OTHERS THEN
-  GET STACKED DIAGNOSTICS state = RETURNED_SQLSTATE, name = CONSTRAINT_NAME, msg = MESSAGE_TEXT;
+  BEGIN
+    EXECUTE sql;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS state = RETURNED_SQLSTATE, name = CONSTRAINT_NAME, msg = MESSAGE_TEXT;
+  END;
+  IF state IS NULL THEN
+    RAISE EXCEPTION 'NG: % はエラーになるはずが通った', label;
+  END IF;
   IF name = expect OR (state = 'P0001' AND msg = expect) THEN
     RAISE NOTICE 'OK: % -> %', label, msg;
   ELSE
-    RAISE WARNING 'NG: % が想定と違う理由で止まった -> % %', label, state, msg;
+    RAISE EXCEPTION 'NG: % が想定と違う理由で止まった -> % %', label, state, msg;
   END IF;
 END $$;
 
+-- 失敗したら、後のテストを続けずにその場で止める
 CREATE FUNCTION pg_temp.ok(label text, sql text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
   EXECUTE sql;
   RAISE NOTICE 'OK: %', label;
 EXCEPTION WHEN OTHERS THEN
-  RAISE WARNING 'NG: % が失敗した -> %', label, SQLERRM;
+  RAISE EXCEPTION 'NG: % が失敗した -> % %', label, SQLSTATE, SQLERRM;
+END $$;
+
+-- 0 件の UPDATE も成功になるので、保存された結果はこれで確かめる
+CREATE FUNCTION pg_temp.assert_true(label text, actual boolean) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  IF actual IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'NG: %', label;
+  END IF;
+  RAISE NOTICE 'OK: %', label;
 END $$;
 
 SET client_min_messages = notice;
@@ -44,7 +59,8 @@ SELECT pg_temp.ok('顧客を作る', $q$
     (pg_temp.u('a'), 'A レンタカー', 'active'), (pg_temp.u('b'), 'B 整備', 'active') $q$);
 SELECT pg_temp.ok('店舗・担当者・提供側担当者を作る', $q$
   INSERT INTO app.stores (id, tenant_id, name) VALUES
-    (pg_temp.u('a1'), pg_temp.u('a'), '本店'), (pg_temp.u('b1'), pg_temp.u('b'), '工場');
+    (pg_temp.u('a1'), pg_temp.u('a'), '本店'), (pg_temp.u('a2'), pg_temp.u('a'), '駅前店'),
+    (pg_temp.u('b1'), pg_temp.u('b'), '工場');
   INSERT INTO app.staff_members (id, tenant_id, display_name, email, status) VALUES
     (pg_temp.u('1a1'), pg_temp.u('a'), '田中', 'tanaka@a.example', 'active'),
     (pg_temp.u('1a2'), pg_temp.u('a'), '鈴木', 'suzuki@a.example', 'active'),
@@ -74,9 +90,16 @@ SELECT pg_temp.ng('付けた人がいない役割', 'staff_role_assignments_chec
 SELECT pg_temp.ng('店舗のない店長', 'staff_role_assignments_check2', $q$
   INSERT INTO app.staff_role_assignments (tenant_id, staff_id, role, created_by_staff)
   VALUES (pg_temp.u('a'), pg_temp.u('1a2'), 'store_manager', pg_temp.u('1a1')) $q$);
-SELECT pg_temp.ng('同じ役割を二重に付ける', 'staff_role_assignments_active', $q$
+SELECT pg_temp.ng('全店舗の役割を二重に付ける', 'staff_role_assignments_active_all_stores', $q$
   INSERT INTO app.staff_role_assignments (tenant_id, staff_id, role, created_by_staff)
   VALUES (pg_temp.u('a'), pg_temp.u('1a1'), 'tenant_admin', pg_temp.u('1a1')) $q$);
+SELECT pg_temp.ok('同じ人を二つの店舗の店長にする', $q$
+  INSERT INTO app.staff_role_assignments (tenant_id, staff_id, role, store_id, created_by_staff) VALUES
+    (pg_temp.u('a'), pg_temp.u('1a2'), 'store_manager', pg_temp.u('a1'), pg_temp.u('1a1')),
+    (pg_temp.u('a'), pg_temp.u('1a2'), 'store_manager', pg_temp.u('a2'), pg_temp.u('1a1')) $q$);
+SELECT pg_temp.ng('同じ店舗の店長を二重に付ける', 'staff_role_assignments_active_store', $q$
+  INSERT INTO app.staff_role_assignments (tenant_id, staff_id, role, store_id, created_by_staff)
+  VALUES (pg_temp.u('a'), pg_temp.u('1a2'), 'store_manager', pg_temp.u('a1'), pg_temp.u('1a1')) $q$);
 SELECT pg_temp.ng('別の顧客の店舗で役割を付ける', 'staff_role_assignments_tenant_id_store_id_fkey', $q$
   INSERT INTO app.staff_role_assignments (tenant_id, staff_id, role, store_id, created_by_staff)
   VALUES (pg_temp.u('a'), pg_temp.u('1a2'), 'store_manager', pg_temp.u('b1'), pg_temp.u('1a1')) $q$);
@@ -129,6 +152,9 @@ SELECT pg_temp.ng('業態とテンプレートが食い違う', 'configuration_m
   VALUES (pg_temp.u('3a9'), pg_temp.u('a'), 9, '{}', pg_temp.u('1a1'));
   INSERT INTO app.configuration_modules (tenant_id, configuration_version_id, business_type, template_id)
   VALUES (pg_temp.u('a'), pg_temp.u('3a9'), 'rental', pg_temp.u('0e2')) $q$);
+SELECT pg_temp.ng('構成版をいきなり反映済みで作る', 'app.configuration_versions は status = draft で作ってください', $q$
+  INSERT INTO app.configuration_versions (tenant_id, version_no, status, settings, created_by_staff, published_by, published_at)
+  VALUES (pg_temp.u('a'), 8, 'published', '{}', pg_temp.u('1a1'), pg_temp.u('1a1'), now()) $q$);
 SELECT pg_temp.ng('反映済みの構成版の設定を変える', '反映済みの構成版は変更・削除できません', $q$
   UPDATE app.configuration_versions SET settings = '{"x":1}' WHERE id = pg_temp.u('3a1') $q$);
 SELECT pg_temp.ng('反映済みの構成版に業態を足す', '反映済みの構成版の業態は変更できません', $q$
@@ -161,6 +187,9 @@ SELECT pg_temp.ng('不正行に理由がない', 'import_job_rows_check', $q$
   VALUES (pg_temp.u('a'), pg_temp.u('5f1'), 3, 'error') $q$);
 SELECT pg_temp.ng('取込の結果を書き換える', 'app.import_job_rows のこの行は変更・削除できません', $q$
   UPDATE app.import_job_rows SET result = 'ok', message = NULL WHERE import_job_id = pg_temp.u('5f1') AND row_no = 2 $q$);
+SELECT pg_temp.ng('取込をいきなり本取込済みで作る', 'app.import_jobs は status = trial で作ってください', $q$
+  INSERT INTO app.import_jobs (tenant_id, file_name, file_sha256, status, created_by, confirmed_by, confirmed_at, committed_at)
+  VALUES (pg_temp.u('a'), 'x.csv', repeat('d', 64), 'committed', pg_temp.u('0f1'), pg_temp.u('1a1'), now(), now()) $q$);
 SELECT pg_temp.ng('顧客の確認なしで本取込する', 'import_jobs_check1', $q$
   UPDATE app.import_jobs SET status = 'committed', committed_at = now() WHERE id = pg_temp.u('5f1') $q$);
 SELECT pg_temp.ok('顧客が確かめてから本取込し、車両を作る', $q$
@@ -169,6 +198,9 @@ SELECT pg_temp.ok('顧客が確かめてから本取込し、車両を作る', $
   UPDATE app.import_jobs SET status = 'committed', committed_at = now() WHERE id = pg_temp.u('5f1');
   INSERT INTO app.vehicles (id, tenant_id, model_name, import_job_id, source_key)
   VALUES (pg_temp.u('4a3'), pg_temp.u('a'), 'プリウス', pg_temp.u('5f1'), 'row-1') $q$);
+SELECT pg_temp.assert_true('本取込の状態と確認者が残っている', EXISTS (
+  SELECT 1 FROM app.import_jobs
+   WHERE id = pg_temp.u('5f1') AND status = 'committed' AND confirmed_by = pg_temp.u('1a1')));
 SELECT pg_temp.ng('本取込した取込を戻す', 'app.import_jobs のこの行は変更・削除できません', $q$
   UPDATE app.import_jobs SET status = 'failed' WHERE id = pg_temp.u('5f1') $q$);
 SELECT pg_temp.ng('同じファイルをもう一度本取込する', 'import_jobs_committed_file', $q$
@@ -382,6 +414,10 @@ SELECT pg_temp.ok('提出する', $q$
          content_hash = repeat('b', 64), submit_idempotency_key = pg_temp.u('fe1'),
          submitted_by = pg_temp.u('1a1'), submitted_at = now()
    WHERE id = pg_temp.u('8a1') $q$);
+SELECT pg_temp.assert_true('提出した版の状態とハッシュが残っている', EXISTS (
+  SELECT 1 FROM app.record_versions
+   WHERE id = pg_temp.u('8a1') AND status = 'submitted' AND content_hash = repeat('b', 64)
+     AND submitted_by = pg_temp.u('1a1')));
 SELECT pg_temp.ng('提出済みの版を書き換える', '提出済みの記録版は変更・削除できません', $q$
   UPDATE app.record_versions SET content_hash = repeat('0', 64) WHERE id = pg_temp.u('8a1') $q$);
 SELECT pg_temp.ng('提出済みの版を消す', '提出済みの記録版は変更・削除できません', $q$
@@ -435,6 +471,9 @@ SELECT pg_temp.ok('訂正の版を作って提出する', $q$
                                    change_reason, configuration_version_id, created_by)
   VALUES (pg_temp.u('8a4'), pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('7a1'), 3, pg_temp.u('8a2'), 'supplement',
           '補足', pg_temp.u('3a1'), pg_temp.u('1a1')) $q$);
+SELECT pg_temp.assert_true('訂正しても元の提出版が残っている', EXISTS (
+  SELECT 1 FROM app.record_versions
+   WHERE id = pg_temp.u('8a1') AND status = 'submitted' AND content_hash = repeat('b', 64)));
 SELECT pg_temp.ng('下書きを二つ作る', 'record_versions_one_draft', $q$
   INSERT INTO app.record_versions (tenant_id, case_id, record_id, version_no, based_on_version_id, change_kind,
                                    change_reason, configuration_version_id, created_by)
@@ -462,19 +501,31 @@ SELECT pg_temp.ok('別の案件の版も提出する', $q$
    WHERE id = pg_temp.u('8a3') $q$);
 SELECT pg_temp.ok('二つの提出版を比べて判定し、判定を直す', $q$
   INSERT INTO app.record_comparisons (tenant_id, case_id, base_version_id, target_version_id, spot_key,
-                                      judgement, reason, created_by)
-  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a2'), 'front', 'changed', '傷が増えた', pg_temp.u('1a1'));
+                                      revision_no, judgement, reason, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a2'), 'front', 1, 'changed', '傷が増えた', pg_temp.u('1a1'));
   INSERT INTO app.record_comparisons (tenant_id, case_id, base_version_id, target_version_id, spot_key,
-                                      judgement, reason, created_by)
-  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a2'), 'front', 'no_change', '光の反射だった', pg_temp.u('1a2')) $q$);
+                                      revision_no, judgement, reason, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a2'), 'front', 2, 'no_change', '光の反射だった', pg_temp.u('1a2')) $q$);
+SELECT pg_temp.assert_true('いちばん大きい revision_no の行が今の判定になる', (
+  SELECT judgement = 'no_change' FROM app.record_comparisons
+   WHERE base_version_id = pg_temp.u('8a1') AND target_version_id = pg_temp.u('8a2') AND spot_key = 'front'
+   ORDER BY revision_no DESC LIMIT 1));
+SELECT pg_temp.ng('同じ revision_no の判定を二つ作る', 'record_comparisons_revision', $q$
+  INSERT INTO app.record_comparisons (tenant_id, case_id, base_version_id, target_version_id, spot_key,
+                                      revision_no, judgement, reason, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a2'), 'front', 2, 'changed', 'x', pg_temp.u('1a1')) $q$);
+SELECT pg_temp.ng('revision_no を 0 にする', 'record_comparisons_revision_no_check', $q$
+  INSERT INTO app.record_comparisons (tenant_id, case_id, base_version_id, target_version_id, spot_key,
+                                      revision_no, judgement, reason, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a2'), 'rear', 0, 'changed', 'x', pg_temp.u('1a1')) $q$);
 SELECT pg_temp.ng('下書きと比べる', 'record_comparisons.target_version_id には提出済みの記録版だけを指定できます', $q$
   INSERT INTO app.record_comparisons (tenant_id, case_id, base_version_id, target_version_id, spot_key,
-                                      judgement, reason, created_by)
-  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a4'), 'front', 'changed', 'x', pg_temp.u('1a1')) $q$);
+                                      revision_no, judgement, reason, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a4'), 'front', 1, 'changed', 'x', pg_temp.u('1a1')) $q$);
 SELECT pg_temp.ng('別の案件の版と比べる', 'record_comparisons_tenant_id_case_id_target_version_id_fkey', $q$
   INSERT INTO app.record_comparisons (tenant_id, case_id, base_version_id, target_version_id, spot_key,
-                                      judgement, reason, created_by)
-  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a3'), 'front', 'changed', 'x', pg_temp.u('1a1')) $q$);
+                                      revision_no, judgement, reason, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('8a3'), 'front', 1, 'changed', 'x', pg_temp.u('1a1')) $q$);
 SELECT pg_temp.ng('判定を上書きする', 'app.record_comparisons のこの行は変更・削除できません', $q$
   UPDATE app.record_comparisons SET judgement = 'changed' WHERE base_version_id = pg_temp.u('8a1') $q$);
 
@@ -534,20 +585,32 @@ SELECT pg_temp.ng('異議の対象項目を外す', 'app.objection_items のこ�
 -- ---------------------------------------------------------------
 SELECT pg_temp.ok('受領の確認を依頼する', $q$
   INSERT INTO app.confirmation_requests (id, tenant_id, case_id, record_version_id, participant_id,
-                                         confirmation_type, statement_key, statement_version, objection_id, created_by) VALUES
-    (pg_temp.u('ca1'), pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('6a1'), 'receipt', 'receipt', 1, NULL, pg_temp.u('1a1')),
+                                         confirmation_type, statement_key, statement_version, statement_text,
+                                         objection_id, created_by) VALUES
+    (pg_temp.u('ca1'), pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('6a1'), 'receipt', 'receipt', 1,
+     '品川 500 あ 12-34 の車両を受け取りました', NULL, pg_temp.u('1a1')),
     (pg_temp.u('ca2'), pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a2'), pg_temp.u('6a1'), 'condition_agreement', 'cond', 1,
-     pg_temp.u('ba1'), pg_temp.u('1a1')) $q$);
+     '預かり時の状態に同意します', pg_temp.u('ba1'), pg_temp.u('1a1')) $q$);
 SELECT pg_temp.ng('別の案件の関係者に依頼する', 'confirmation_requests_tenant_id_case_id_participant_id_fkey', $q$
   INSERT INTO app.confirmation_requests (tenant_id, case_id, record_version_id, participant_id,
-                                         confirmation_type, statement_key, statement_version, created_by)
-  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('6a2'), 'view', 'v', 1, pg_temp.u('1a1')) $q$);
+                                         confirmation_type, statement_key, statement_version, statement_text, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('6a2'), 'view', 'v', 1, '閲覧', pg_temp.u('1a1')) $q$);
 SELECT pg_temp.ng('下書きの確認を依頼する', 'confirmation_requests.record_version_id には提出済みの記録版だけを指定できます', $q$
   INSERT INTO app.confirmation_requests (tenant_id, case_id, record_version_id, participant_id,
-                                         confirmation_type, statement_key, statement_version, created_by)
-  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a4'), pg_temp.u('6a1'), 'view', 'v', 1, pg_temp.u('1a1')) $q$);
+                                         confirmation_type, statement_key, statement_version, statement_text, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a4'), pg_temp.u('6a1'), 'view', 'v', 1, '閲覧', pg_temp.u('1a1')) $q$);
+SELECT pg_temp.ng('見せた文面が空の依頼', 'confirmation_requests_statement_text_not_blank', $q$
+  INSERT INTO app.confirmation_requests (tenant_id, case_id, record_version_id, participant_id,
+                                         confirmation_type, statement_key, statement_version, statement_text, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('6a1'), 'view', 'v', 1, '  ', pg_temp.u('1a1')) $q$);
+SELECT pg_temp.ng('文面の版が 0 の依頼', 'confirmation_requests_statement_version_positive', $q$
+  INSERT INTO app.confirmation_requests (tenant_id, case_id, record_version_id, participant_id,
+                                         confirmation_type, statement_key, statement_version, statement_text, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), pg_temp.u('6a1'), 'view', 'v', 0, '閲覧', pg_temp.u('1a1')) $q$);
 SELECT pg_temp.ng('依頼の文面の版を変える', 'app.confirmation_requests の statement_version は変更できません', $q$
   UPDATE app.confirmation_requests SET statement_version = 2 WHERE id = pg_temp.u('ca1') $q$);
+SELECT pg_temp.ng('見せた文面を書き換える', 'app.confirmation_requests の statement_text は変更できません', $q$
+  UPDATE app.confirmation_requests SET statement_text = '別の文面' WHERE id = pg_temp.u('ca1') $q$);
 
 SELECT pg_temp.ok('回答し、答え直す', $q$
   INSERT INTO app.confirmation_responses (id, tenant_id, case_id, request_id, confirmation_type, answer,
@@ -700,6 +763,25 @@ SELECT pg_temp.ng('共有する版がないまま発行する', '共有する記
 SELECT pg_temp.ng('いきなり発行済みで作る', '共有は発行前の状態で作ってから発行してください', $q$
   INSERT INTO app.share_grants (tenant_id, recipient_tenant_id, purpose, expires_at, issued_by, issued_at, created_by)
   VALUES (pg_temp.u('a'), pg_temp.u('b'), 'x', now() + interval '7 day', pg_temp.u('1a1'), now(), pg_temp.u('1a1')) $q$);
+SELECT pg_temp.ng('いきなり取り消し済みで作る', '共有は発行前の状態で作ってから発行してください', $q$
+  INSERT INTO app.share_grants (tenant_id, recipient_tenant_id, purpose, expires_at, revoked_by, revoked_at,
+                                revoke_reason, created_by)
+  VALUES (pg_temp.u('a'), pg_temp.u('b'), 'x', now() + interval '7 day', pg_temp.u('1a1'), now(), 'x',
+          pg_temp.u('1a1')) $q$);
+SELECT pg_temp.ng('期限より後の日時で発行する', 'share_grants_expiry_after_issue', $q$
+  INSERT INTO app.share_grants (id, tenant_id, recipient_tenant_id, purpose, expires_at, created_by)
+  VALUES (pg_temp.u('ea5'), pg_temp.u('a'), pg_temp.u('b'), 'x', now() + interval '1 day', pg_temp.u('1a1'));
+  INSERT INTO app.share_grant_targets (tenant_id, share_grant_id, case_id, record_version_id)
+  VALUES (pg_temp.u('a'), pg_temp.u('ea5'), pg_temp.u('5a1'), pg_temp.u('8a1'));
+  UPDATE app.share_grants SET issued_by = pg_temp.u('1a1'), issued_at = now() + interval '2 day'
+   WHERE id = pg_temp.u('ea5') $q$);
+SELECT pg_temp.ng('期限が切れた共有を、日時をさかのぼって発行する', '期限が切れた共有は発行できません', $q$
+  INSERT INTO app.share_grants (id, tenant_id, recipient_tenant_id, purpose, expires_at, created_by)
+  VALUES (pg_temp.u('ea6'), pg_temp.u('a'), pg_temp.u('b'), 'x', now() - interval '1 day', pg_temp.u('1a1'));
+  INSERT INTO app.share_grant_targets (tenant_id, share_grant_id, case_id, record_version_id)
+  VALUES (pg_temp.u('a'), pg_temp.u('ea6'), pg_temp.u('5a1'), pg_temp.u('8a1'));
+  UPDATE app.share_grants SET issued_by = pg_temp.u('1a1'), issued_at = now() - interval '2 day'
+   WHERE id = pg_temp.u('ea6') $q$);
 SELECT pg_temp.ok('共有を発行し、相手が受け入れる', $q$
   UPDATE app.share_grants SET issued_by = pg_temp.u('1a1'), issued_at = now() WHERE id = pg_temp.u('ea2');
   UPDATE app.share_grants SET accepted_by = pg_temp.u('1b1'), accepted_at = now() WHERE id = pg_temp.u('ea2') $q$);
@@ -763,22 +845,44 @@ SELECT pg_temp.ng('下書きの検証基準を作る', 'anchors.record_version_i
 SELECT pg_temp.ng('同じ版・同じ方式の基準を二つ作る', 'anchors_record_version_id_method_key', $q$
   INSERT INTO integrity.anchors (tenant_id, case_id, record_version_id, method, method_version, manifest, manifest_hash)
   VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a1'), 'chain', '2', decode('00', 'hex'), 'x') $q$);
+SELECT pg_temp.ng('検証基準をいきなり登録済みで作る', 'integrity.anchors は status = unregistered で作ってください', $q$
+  INSERT INTO integrity.anchors (tenant_id, case_id, record_version_id, method, method_version, manifest, manifest_hash,
+                                 status, external_ref, registered_at)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a2'), 'chain', '1', decode('00', 'hex'), repeat('7', 64),
+          'registered', '0x9', now()) $q$);
 SELECT pg_temp.ng('登録した内容を書き換える', 'integrity.anchors の manifest は変更できません', $q$
   UPDATE integrity.anchors SET manifest = decode('01', 'hex') WHERE id = pg_temp.u('0c1') $q$);
 
-SELECT pg_temp.ok('登録を試し、結果を入れる', $q$
-  INSERT INTO integrity.anchor_attempts (id, tenant_id, case_id, anchor_id, attempt_no, kind, idempotency_key)
-  VALUES (pg_temp.u('0d1'), pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('0c1'), 1, 'submit', 'anchor-0c1-1');
+SELECT pg_temp.ok('登録を試して失敗し、同じ登録をもう一度試して結果を入れる', $q$
+  INSERT INTO integrity.anchor_attempts (id, tenant_id, case_id, anchor_id, attempt_no, kind)
+  VALUES (pg_temp.u('0d2'), pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('0c1'), 1, 'submit');
+  UPDATE integrity.anchor_attempts SET outcome = 'failed', response = '{"error":"timeout"}', finished_at = now()
+   WHERE id = pg_temp.u('0d2');
+  INSERT INTO integrity.anchor_attempts (id, tenant_id, case_id, anchor_id, attempt_no, kind)
+  VALUES (pg_temp.u('0d1'), pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('0c1'), 2, 'submit');
   UPDATE integrity.anchor_attempts SET outcome = 'succeeded', response = '{"tx":"0x1"}', finished_at = now()
    WHERE id = pg_temp.u('0d1') $q$);
+SELECT pg_temp.ng('同じ試行の番号を二度使う', 'anchor_attempts_anchor_id_attempt_no_key', $q$
+  INSERT INTO integrity.anchor_attempts (tenant_id, case_id, anchor_id, attempt_no, kind)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('0c1'), 2, 'lookup') $q$);
+SELECT pg_temp.ng('試行の番号が 0', 'anchor_attempts_attempt_no_positive', $q$
+  INSERT INTO integrity.anchor_attempts (tenant_id, case_id, anchor_id, attempt_no, kind)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('0c1'), 0, 'lookup') $q$);
 SELECT pg_temp.ng('結果だけ入れて終わった日時がない', 'anchor_attempts_check', $q$
-  INSERT INTO integrity.anchor_attempts (tenant_id, case_id, anchor_id, attempt_no, kind, idempotency_key, outcome)
-  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('0c1'), 2, 'lookup', 'anchor-0c1-2', 'failed') $q$);
+  INSERT INTO integrity.anchor_attempts (tenant_id, case_id, anchor_id, attempt_no, kind, outcome)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('0c1'), 3, 'lookup', 'failed') $q$);
 SELECT pg_temp.ng('終わった試行を書き換える', 'integrity.anchor_attempts のこの行は変更・削除できません', $q$
   UPDATE integrity.anchor_attempts SET outcome = 'failed' WHERE id = pg_temp.u('0d1') $q$);
 SELECT pg_temp.ng('案件と食い違う試行', 'anchor_attempts_tenant_id_case_id_anchor_id_fkey', $q$
-  INSERT INTO integrity.anchor_attempts (tenant_id, case_id, anchor_id, attempt_no, kind, idempotency_key)
-  VALUES (pg_temp.u('a'), pg_temp.u('5a2'), pg_temp.u('0c1'), 3, 'lookup', 'anchor-0c1-3') $q$);
+  INSERT INTO integrity.anchor_attempts (tenant_id, case_id, anchor_id, attempt_no, kind)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a2'), pg_temp.u('0c1'), 3, 'lookup') $q$);
+SELECT pg_temp.ng('失敗した試行しかない基準を登録済みにする', '成功した試行がない検証基準は registered にできません', $q$
+  INSERT INTO integrity.anchors (id, tenant_id, case_id, record_version_id, method, method_version, manifest, manifest_hash)
+  VALUES (pg_temp.u('0c2'), pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('8a2'), 'chain', '1', decode('00', 'hex'), repeat('7', 64));
+  INSERT INTO integrity.anchor_attempts (tenant_id, case_id, anchor_id, attempt_no, kind, outcome, finished_at)
+  VALUES (pg_temp.u('a'), pg_temp.u('5a1'), pg_temp.u('0c2'), 1, 'submit', 'failed', now());
+  UPDATE integrity.anchors SET status = 'registered', external_ref = '0x9', registered_at = now()
+   WHERE id = pg_temp.u('0c2') $q$);
 SELECT pg_temp.ng('登録先の参照なしで登録済みにする', 'anchors_check1', $q$
   UPDATE integrity.anchors SET status = 'registered', registered_at = now() WHERE id = pg_temp.u('0c1') $q$);
 SELECT pg_temp.ok('登録済みにする', $q$

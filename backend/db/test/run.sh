@@ -17,13 +17,15 @@ for f in migrations/*.up.sql; do
   "${psql[@]}" -1 -d "$db" -f "$f"
 done
 
-out=$(psql -X -q -d "$db" -f test/constraints.sql -f test/rules.sql 2>&1)
+# テストは最初の NG で止まる。止まったら psql が 0 以外で終わるので、その終了コードでも失敗を判定する
+status=0
+out=$("${psql[@]}" -d "$db" -f test/constraints.sql -f test/rules.sql 2>&1) || status=$?
 ok=$(grep -c 'OK:' <<<"$out" || true)
 ng=$(grep -E 'NG:|ERROR:' <<<"$out" || true)
 
-if [[ -n "$ng" ]]; then
-  echo "$ng"
-  echo "OK $ok 件、NG $(grep -c . <<<"$ng") 件"
+if [[ $status -ne 0 || -n "$ng" ]]; then
+  echo "$out"
+  echo "OK $ok 件で止まりました（psql の終了コード $status）"
   exit 1
 fi
 echo "OK $ok 件"
