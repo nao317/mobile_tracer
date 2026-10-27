@@ -22,7 +22,7 @@ Tapyrusの初期化、接続確認、検証用送金、停止・データ削除�
 
 React Router、Go、PostgreSQL、Tapyrus APIをそれぞれDockerコンテナで動かし、NginxでHTTPリクエストの振り分けをまとめて管理する構成を採用します。開発環境ではDocker Composeで各サービスを起動する方針です。
 
-現在はフロントエンドの開発環境・CI、Go・EchoのAPI基盤と、Tapyrus Core・Esploraのローカル開発環境を用意しています。以下には、今後導入する技術を含めた設計方針を記載します。
+現在はフロントエンドの開発環境・CI、Go・EchoのAPI基盤、PostgreSQLのスキーマ・API接続と、Tapyrus Core・Esploraのローカル開発環境を用意しています。以下には、今後導入する技術を含めた設計方針を記載します。
 
 ### 技術構成図
 

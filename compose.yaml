@@ -5,6 +5,16 @@ services:
     environment:
       PORT: "8080"
       SHUTDOWN_TIMEOUT: "${SHUTDOWN_TIMEOUT:-10s}"
+      DB_HOST: db
+      DB_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-mobile_tracer}
+      POSTGRES_USER: ${POSTGRES_USER:-mobiletracer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/init.sh first}
+      DB_SSLMODE: disable
+      DB_TIMEOUT: ${DB_TIMEOUT:-3s}
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-10}
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-2}
+      DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-30m}
       TAPYRUS_RPC_URL: http://tapyrusd:12381
       TAPYRUS_RPC_USER: ${TAPYRUS_RPC_USER:-mobiletracer}
       TAPYRUS_RPC_PASSWORD: ${TAPYRUS_RPC_PASSWORD:?Run bash scripts/init.sh first}
@@ -13,7 +23,7 @@ services:
     depends_on:
       esplora:
         condition: service_healthy
-      # DBはまだ使わないが、終了するサービスに待つ側がないと up --wait が失敗する。
+      # テーブル作成を終えてからAPIを起動する。
       db-migrate:
         condition: service_completed_successfully
     ports:
@@ -23,7 +33,7 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--quiet", "-O", "/dev/null", "http://127.0.0.1:8080/api/ready"]
       interval: 10s
-      timeout: 7s
+      timeout: 10s
       start_period: 5s
       retries: 3
 
