@@ -112,6 +112,7 @@ jobs:
             "docker/tapyrus/bootstrap.sh"
             "scripts/init.sh"
             "scripts/smoke.py"
+            "scripts/db-smoke.py"
             "scripts/tapyrus-smoke.py"
           )
 
@@ -133,6 +134,26 @@ jobs:
     if: needs.detect.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+        env:
+          POSTGRES_DB: mobile_tracer_test
+          POSTGRES_USER: mobiletracer
+          POSTGRES_PASSWORD: "ci-only p@ss /'\\?=#"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mobiletracer -d mobile_tracer_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+
+    env:
+      TEST_DATABASE: "1"
+      DB_HOST: 127.0.0.1
+      POSTGRES_DB: mobile_tracer_test
+      POSTGRES_USER: mobiletracer
+      POSTGRES_PASSWORD: "ci-only p@ss /'\\?=#"
 
     defaults:
       run:
@@ -204,8 +225,15 @@ jobs:
       - name: Check application connections
         run: python3 scripts/smoke.py
 
+      - name: Check DB outage and recovery
+        run: python3 scripts/db-smoke.py
+
       - name: Check Tapyrus transaction
         run: python3 scripts/tapyrus-smoke.py
+
+      # マイグレーションを空のDBに流し直し、制約のテストをする。
+      - name: Check DB migrations
+        run: docker compose run --rm db-test
 
       - name: Check initialization is repeatable
         run: |

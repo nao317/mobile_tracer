@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nao317/mobile_tracer/backend/internal/config"
+	"github.com/nao317/mobile_tracer/backend/internal/database"
 	"github.com/nao317/mobile_tracer/backend/internal/server"
 	"github.com/nao317/mobile_tracer/backend/internal/tapyrus"
 )
@@ -33,11 +34,22 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
+func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr error) {
 	tapyrusCfg, err := config.LoadTapyrus()
 	if err != nil {
 		return err
 	}
+	dbCfg, err := config.LoadDatabase()
+	if err != nil {
+		return err
+	}
+	db, err := database.Open(ctx, dbCfg)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		runErr = errors.Join(runErr, db.Close())
+	}()
 	var readiness func(context.Context) error
 	if tapyrusCfg.RPCURL != "" {
 		client := tapyrus.New(tapyrusCfg)
@@ -51,7 +63,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	srv := &http.Server{
-		Handler:           server.New(logger, readiness),
+		Handler:           server.New(logger, db.Ping, readiness),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	serveErr := make(chan error, 1)

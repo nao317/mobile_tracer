@@ -5,6 +5,16 @@ services:
     environment:
       PORT: "8080"
       SHUTDOWN_TIMEOUT: "${SHUTDOWN_TIMEOUT:-10s}"
+      DB_HOST: db
+      DB_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-mobile_tracer}
+      POSTGRES_USER: ${POSTGRES_USER:-mobiletracer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/init.sh first}
+      DB_SSLMODE: disable
+      DB_TIMEOUT: ${DB_TIMEOUT:-3s}
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-10}
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-2}
+      DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-30m}
       TAPYRUS_RPC_URL: http://tapyrusd:12381
       TAPYRUS_RPC_USER: ${TAPYRUS_RPC_USER:-mobiletracer}
       TAPYRUS_RPC_PASSWORD: ${TAPYRUS_RPC_PASSWORD:?Run bash scripts/init.sh first}
@@ -13,6 +23,9 @@ services:
     depends_on:
       esplora:
         condition: service_healthy
+      # テーブル作成を終えてからAPIを起動する。
+      db-migrate:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     # Keep this longer than SHUTDOWN_TIMEOUT when changing the shutdown limit.
@@ -20,7 +33,7 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--quiet", "-O", "/dev/null", "http://127.0.0.1:8080/api/ready"]
       interval: 10s
-      timeout: 7s
+      timeout: 10s
       start_period: 5s
       retries: 3
 
@@ -90,7 +103,54 @@ services:
       timeout: 7s
       retries: 40
 
+  db:
+    image: &db-image postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mobile_tracer}
+      POSTGRES_USER: ${POSTGRES_USER:-mobiletracer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/init.sh first}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # backend/db/migrations のうち未適用のものを流して終了する。
+  db-migrate:
+    image: migrate/migrate:v4.18.3@sha256:39b59b389634e43bb3f2d4e94bc1edef0775ec2a9a3540ce6a2cf330e5daae55
+    # 認証情報はURLに書かず、PGUSERなどの環境変数で渡す（記号を含んでも壊れないように）。
+    command: ["-path=/migrations", "-database=postgres://db:5432/?sslmode=disable", "up"]
+    environment:
+      PGDATABASE: ${POSTGRES_DB:-mobile_tracer}
+      PGUSER: ${POSTGRES_USER:-mobiletracer}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/init.sh first}
+    volumes:
+      - ./backend/db/migrations:/migrations:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 制約のテスト。up では起動せず、docker compose run --rm db-test で流す。
+  db-test:
+    image: *db-image
+    profiles: [test]
+    entrypoint: ["bash", "/work/test/run.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-mobiletracer}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/init.sh first}
+    volumes:
+      - ./backend/db:/work:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   tapyrus-data:
   tapyrus-auth:
   esplora-data:
+  db-data:
