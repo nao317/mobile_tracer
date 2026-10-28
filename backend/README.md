@@ -1,6 +1,10 @@
 # バックエンドAPI
 
-Go・Echoで動くAPIです。`GET /api/health` はAPI単体の稼働を確認し、HTTP 200と `{"status":"ok"}` を返します。`GET /api/ready` はPostgreSQLへの接続と、Tapyrus Core・Esploraの接続・索引の準備状態を確認します。ComposeではNginx経由でアクセスします。業務APIは別Issueで実装します。
+Go・Echoで動くAPIです。`GET /api/health` はAPI単体の稼働を確認し、HTTP 200と `{"status":"ok"}` を返します。`GET /api/ready` はPostgreSQLへの接続と、Tapyrus Core・Esploraの接続・索引の準備状態を確認します。ComposeではNginx経由でアクセスします。
+
+車両・案件・記録・下書きの基本操作APIも実装しています。エンドポイント、検索クエリ、JSON形式、権限、エラー、開発用データと操作例は[フロントエンド向けAPI仕様](../docs/api.md)を参照してください。業務APIの開発認証は、明示的に設定するまで無効です。本番の認証プロバイダーとの接続は後続実装です。
+
+HTTPの受付は `internal/server/business.go`、業務処理は `internal/business/service.go` と `rules.go`、DBアクセスは `internal/business/repository*.go` に分けています。リクエスト・レスポンスの型は `internal/business/types.go` で、DBへの保存・読取用の型とは分けています。
 
 ## ローカルで起動する
 
@@ -131,7 +135,7 @@ SHUTDOWN_TIMEOUT=20s BACKEND_STOP_GRACE_PERIOD=25s docker compose up --build --w
 gofmt -l .
 go vet ./...
 go test -race -count=1 ./...
-go build ./cmd/api ./cmd/tapyrus-check
+go build ./cmd/api ./cmd/tapyrus-check ./cmd/dev-seed
 ```
 
 `gofmt -l .` は、整形が必要なファイルがなければ何も表示しません。整形する場合は `gofmt -w .` を実行します。
@@ -143,6 +147,12 @@ go build ./cmd/api ./cmd/tapyrus-check
 ```bash
 TEST_DATABASE=1 go test -race -count=1 ./...
 ```
+
+業務APIの結合テストは、接続先PostgreSQLに `crud_test_` で始まる一時DBを作り、既存のマイグレーションと開発用データを適用してHTTP経由の操作を確認します。実行ユーザーにはDB作成権限が必要です。終了時に一時DBを削除し、指定した接続先DBの業務テーブルは変更しません。CIでも同じテストを実行します。
+
+顧客・店舗・担当案件の分離、認証・役割の失効、入力検証、検索・ページネーション、提出版の保全、同時更新、監査保存に失敗した場合のロールバックを検証します。
+
+ローカルでGoから開発用データを投入する場合は、マイグレーション適用後、DB接続の環境変数を設定して `APP_ENV=development go run ./cmd/dev-seed` を実行します。Composeからの手順はAPI仕様書を参照してください。
 
 全サービスの起動後、リポジトリルートで次を実行すると、不正な認証情報による起動失敗と、DB停止時の503・復旧後の200を確認できます。DBを一時停止するため、ローカルの検証環境で実行してください。CIの結合テストでも実行します。
 
