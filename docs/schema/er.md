@@ -1,6 +1,6 @@
 # ER 図（たたき台）
 
-[tables.md](tables.md) のテーブル案を、四つの範囲に分けて描いています。列は主キー、外部キー、状態など関係を読むのに必要なものだけを載せています。全列は [000001_init.up.sql](../../backend/db/migrations/000001_init.up.sql) を見てください。
+[tables.md](tables.md) のテーブル案を、四つの範囲に分けて描いています。列は主キー、外部キー、状態など関係を読むのに必要なものだけを載せています。全列は [初期 DDL](../../backend/db/migrations/000001_init.up.sql)、保存日数設定の廃止は [000002](../../backend/db/migrations/000002_remove_retention_policies.up.sql) を見てください。
 
 - ほぼすべてのテーブルが `tenant_id` を持ち、複合外部キーで同じ顧客の行だけを指します。図では `tenant_id` と `tenants` への線を省いています。
 - 案件の下の表は `case_id` も持ち、同じ案件の行だけを指します。図では `case_id` を省いています。
@@ -382,7 +382,6 @@ erDiagram
   anchor_transactions ||--o{ anchor_attempts : "送ったか照会したトランザクション"
   record_versions ||--o{ verification_runs : "照合"
   anchors |o--o{ verification_runs : "使った基準"
-  tenants ||--o{ retention_policies : "保存期間"
   cases |o--o{ deletion_requests : "案件の削除"
   parties |o--o{ deletion_requests : "個人情報の削除"
 
@@ -427,11 +426,6 @@ erDiagram
     uuid record_version_id FK
     uuid anchor_id FK
     text result "match / mismatch / unverifiable"
-  }
-  retention_policies {
-    uuid tenant_id PK
-    text target_kind PK "media / record / personal_copy / share / audit"
-    integer retain_days "未定のあいだは NULL"
   }
   deletion_requests {
     uuid id PK

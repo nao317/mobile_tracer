@@ -901,14 +901,10 @@ SELECT pg_temp.ng('共有した側の担当者が受け入れる', $q$
   '23503', 'share_grants_recipient_tenant_id_accepted_by_fkey');
 
 -- ---------------------------------------------------------------
--- 保存期間と削除
+-- 期間経過による自動削除は行わず、個別の削除申請を管理する
 -- ---------------------------------------------------------------
-SELECT pg_temp.ok('保存期間を決めて直す', $q$
-  INSERT INTO app.retention_policies (tenant_id, target_kind) VALUES (pg_temp.u('a'), 'media');
-  UPDATE app.retention_policies SET retain_days = 365, basis = '契約' WHERE tenant_id = pg_temp.u('a') $q$);
-SELECT pg_temp.ng('保存期間の対象を変える', $q$
-  UPDATE app.retention_policies SET target_kind = 'record' WHERE tenant_id = pg_temp.u('a') $q$,
-  'P0001', expected_message => 'app.retention_policies の target_kind は変更できません');
+SELECT pg_temp.assert_true('保存日数の設定テーブルは廃止されている',
+  to_regclass('app.retention_policies') IS NULL);
 
 SELECT pg_temp.ng('案件と関係者の両方を消す申請', $q$
   INSERT INTO app.deletion_requests (tenant_id, case_id, party_id, reason, created_by)
@@ -916,7 +912,7 @@ SELECT pg_temp.ng('案件と関係者の両方を消す申請', $q$
   '23514', 'deletion_requests_check');
 SELECT pg_temp.ok('削除を申請し、保留して、承認して実行する', $q$
   INSERT INTO app.deletion_requests (id, tenant_id, case_id, reason, created_by)
-  VALUES (pg_temp.u('dd1'), pg_temp.u('a'), pg_temp.u('5a2'), '保存期間の満了', pg_temp.u('1a1'));
+  VALUES (pg_temp.u('dd1'), pg_temp.u('a'), pg_temp.u('5a2'), '誤登録した個人情報の削除申請', pg_temp.u('1a1'));
   UPDATE app.deletion_requests SET status = 'on_hold', hold_reason = '異議の対応中' WHERE id = pg_temp.u('dd1');
   UPDATE app.deletion_requests SET status = 'approved', hold_reason = NULL, decided_by = pg_temp.u('1a2'),
                                    decided_at = now() WHERE id = pg_temp.u('dd1');
