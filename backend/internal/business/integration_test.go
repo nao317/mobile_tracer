@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -60,12 +61,21 @@ func testDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	migration, err := os.ReadFile("../../db/migrations/000001_init.up.sql")
+	migrations, err := filepath.Glob("../../db/migrations/*.up.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.GORM.Transaction(func(tx *gorm.DB) error { return tx.Exec(string(migration)).Error }); err != nil {
-		t.Fatal(err)
+	if len(migrations) == 0 {
+		t.Fatal("no SQL migrations found")
+	}
+	for _, path := range migrations {
+		migration, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.GORM.Transaction(func(tx *gorm.DB) error { return tx.Exec(string(migration)).Error }); err != nil {
+			t.Fatalf("apply %s: %v", path, err)
+		}
 	}
 	if err := seeds.Apply(t.Context(), db.GORM); err != nil {
 		t.Fatal(err)

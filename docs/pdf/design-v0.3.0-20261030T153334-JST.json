@@ -1,0 +1,41 @@
+{
+  "version": "0.3.0",
+  "generated_at_jst": "2026-10-30T15:33:34+09:00",
+  "source": "docs/design.md",
+  "source_sha256": "f182b0ea20da58e7c48c9486760b327fb13efadf51764019ff2cbea67961bd30",
+  "pdf": "design-v0.3.0-20261030T153334-JST.pdf",
+  "pdf_sha256": "92b950ccd1bb284d879fd40db96d30be37aad85747d4140a7afc7e35a31ab3ec",
+  "pages": 36,
+  "build_inputs_sha256": "abe528761e5dae9356a51282ba2bbf055c33314e3b6f5ab363efde760ce9287d",
+  "build_inputs": {
+    "files": {
+      "build.py": "76d1ba4626e66f8e0dfcc96e68eb19e5279f4ab64ab5f0b79c30ff007cc25294",
+      "requirements_check.py": "30d2df68b94370d166c93bf3909d9532b0c9ba1e4b897adaa072276ee902e744",
+      "print.css": "f303855d449958fc0e6718fa4ecd922774402b130650646cb2d85b6086841f94",
+      "requirements.txt": "857474c4a49929b55b3598ef476ddec34cf5d90966691468e07a3e1468f54b52"
+    },
+    "packages": {
+      "brotli": "1.2.1",
+      "cffi": "2.1.1",
+      "cssselect2": "0.10.1",
+      "fonttools": "4.67.0",
+      "markdown-it-py": "4.0.0",
+      "mdurl": "0.1.2",
+      "Pillow": "13.0.0",
+      "pycparser": "3.12",
+      "pydyf": "0.13.0",
+      "PyMuPDF": "1.26.7",
+      "Pyphen": "0.18.1",
+      "tinycss2": "1.5.1",
+      "tinyhtml5": "2.1.0",
+      "weasyprint": "70.0",
+      "webencodings": "0.6.1",
+      "zopfli": "0.4.3"
+    }
+  },
+  "render_environment": {
+    "python": "3.14.4",
+    "font_sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a"
+  },
+  "source_material_sha256": "c6297b9777c679ceb464ff13ab1aa89ab084e24a60963624dc86240f6f7d583e"
+}
