@@ -4,19 +4,22 @@ Issue #15 のスキーマ設計をもとに、要件定義書 [design.md](../des
 
 - 初期 DDL: [000001_init.up.sql](../../backend/db/migrations/000001_init.up.sql)（PostgreSQL 14 以上）
 - 保存日数設定の廃止: [000002_remove_retention_policies.up.sql](../../backend/db/migrations/000002_remove_retention_policies.up.sql)
+- Firebase移行: [000004_firebase_auth.up.sql](../../backend/db/migrations/000004_firebase_auth.up.sql)
+- 旧Google認証とセッション: [000003_google_auth.up.sql](../../backend/db/migrations/000003_google_auth.up.sql)
 - ER 図: [er.md](er.md)
 
 要件の変更は先に design.md を改訂します。この文書の内容で要件を確定させません。
 
 ## 方針
 
-### スキーマを三つに分ける
+### 用途ごとにスキーマを分ける
 
 | スキーマ | 内容 | 主な要件 |
 | --- | --- | --- |
 | `app` | 組織、構成版、車両、案件、記録、確認、異議、共有などの業務データ | FR-C01〜C18、FR-T01〜T06 |
 | `integrity` | 検証基準（ハッシュの束と外部登録の状態）と照合結果 | FR-C09、FR-C10、NFR-03、NFR-12 |
 | `audit` | 操作とアクセスの履歴 | FR-C16 |
+| `auth` | Firebaseの本人識別子、担当者への紐付け、セッション、ログインCSRF、旧認証の履歴 | [認証の手順](../auth.md) |
 
 `integrity` と `audit` を分けるのは、アプリが使う DB ロールの権限を変えるためです（後述の「DB ロールと権限」）。
 
@@ -76,6 +79,19 @@ Issue #15 のスキーマ設計をもとに、要件定義書 [design.md](../des
 
 `record_entries` は項目を列ではなく1項目1行で持ちます。項目は顧客ごとの構成版で決まり、テーブルの列にできないためです。値の型は構成版の項目定義で確かめます。
 
+## Firebase認証とセッション
+
+| 表 | 役割 |
+| --- | --- |
+| `auth.users` | Firebaseプロジェクトの`issuer`とUID（`subject`）で識別する本人。旧Google識別子も履歴として保持 |
+| `auth.staff_links` | 本人と既存担当者の明示的な対応。顧客・担当者の複合外部キーと、有効な紐付けの一意制約を持つ |
+| `auth.sessions` | ユーザー、選択中の担当者、FirebaseセッションCookieのハッシュ、CSRFハッシュ、有効期限、失効日時 |
+| `auth.login_challenges` | 一回限りのログインCSRFチャレンジと、ブラウザーとの結び付けのハッシュ |
+| `auth.oauth_flows` | 旧Google直接OAuthの履歴。Migration 4以降は利用しない |
+| `auth.refresh_tokens` | 旧アプリJWTの更新履歴。Migration 4以降は利用しない |
+
+Migration 4でFirebaseへ移行します。メールだけで担当者を自動紐付けしません。管理者の判定はサーバーで確認済みメールと環境変数を照合します。パスワードとトークン本体はDBに保存しません。紐付け・チャレンジ・失効済みセッションの履歴はトリガーで保護します。認証期限は業務記録の保存期限ではなく、期間経過による自動削除は行いません。設定は[認証の手順](../auth.md)を参照してください。
+
 ## 再送で重複させない
 
 通信が切れたあとに同じ操作が再送されても二重に登録しないよう、端末やワーカーが作るキーに一意制約を付けます（NFR-06）。
@@ -113,7 +129,7 @@ Tapyrus に送る署名済みのトランザクションは、送る前に `anch
 
 ## テーブル一覧
 
-`000002` 適用後は全部で 45 テーブルです（`app` 40、`integrity` 4、`audit` 1）。列の詳細は DDL を見てください。
+`000004` 適用後は全部で 51 テーブルです（`app` 40、`integrity` 4、`audit` 1、`auth` 6）。列の詳細は DDL を見てください。
 
 ### 組織と権限
 
@@ -266,7 +282,8 @@ Tapyrus に送る署名済みのトランザクションは、送る前に `anch
 | ロール | 権限 |
 | --- | --- |
 | マイグレーション用 | スキーマの変更。アプリの実行時には使わない |
-| アプリ用 | `app` の読み書き。`audit` と `integrity.verification_runs` は INSERT と SELECT だけ。TRUNCATE はどの表にも渡さない |
+| アプリ用 | `app` の読み書き。`auth.users`・`auth.login_challenges`・`auth.sessions` の認証処理に必要な読み書きと、`auth.staff_links` の SELECT。`audit` と `integrity.verification_runs` は INSERT と SELECT だけ。TRUNCATE はどの表にも渡さない |
+| 認証の紐付け運用用 | `auth-link`で`auth.users`と`auth.staff_links`を登録・取消しし、`audit.events`へ追記する。通常の業務APIには紐付け変更を公開しない |
 | 登録処理用 | `integrity.anchors`、`integrity.anchor_transactions`、`integrity.anchor_attempts` の読み書き。外部登録のワーカーだけが使う |
 | 閲覧用 | 監査や調査のための SELECT だけ |
 

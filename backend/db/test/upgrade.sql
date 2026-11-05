@@ -75,3 +75,29 @@ SELECT pg_temp.ng('移行後も提出済みの記録版を削除できない', $
 SELECT pg_temp.ng('移行後も原本の DB 行を削除できない', $q$
   DELETE FROM app.media_originals WHERE id = pg_temp.u('9001') $q$,
   'P0001', expected_message => 'app.media_originals のこの行は変更・削除できません');
+
+-- 既存Google認証の履歴を残してFirebaseへ移行する。
+\ir ../migrations/000003_google_auth.up.sql
+INSERT INTO auth.users(id,issuer,subject) VALUES(pg_temp.u('ab01'),'https://accounts.google.com','old-google-sub');
+INSERT INTO auth.staff_links(user_id,tenant_id,staff_id) VALUES(pg_temp.u('ab01'),pg_temp.u('1'),pg_temp.u('101'));
+INSERT INTO auth.sessions(id,user_id,csrf_hash,expires_at) VALUES(pg_temp.u('ab02'),pg_temp.u('ab01'),repeat('a',64),now()+interval '1 day');
+INSERT INTO auth.refresh_tokens(token_hash,session_id,expires_at) VALUES(repeat('b',64),pg_temp.u('ab02'),now()+interval '1 day');
+CREATE TEMP TABLE old_auth_links AS SELECT * FROM auth.staff_links;
+CREATE TEMP TABLE old_auth_users AS SELECT * FROM auth.users;
+CREATE TEMP TABLE old_auth_refresh AS SELECT * FROM auth.refresh_tokens;
+\ir ../migrations/000004_firebase_auth.up.sql
+SELECT pg_temp.assert_true('旧認証の本人・紐付け・更新履歴を保持する',
+ NOT EXISTS(SELECT * FROM old_auth_users EXCEPT SELECT * FROM auth.users)
+ AND NOT EXISTS(SELECT * FROM old_auth_links EXCEPT SELECT * FROM auth.staff_links)
+ AND NOT EXISTS(SELECT * FROM old_auth_refresh EXCEPT SELECT * FROM auth.refresh_tokens));
+SELECT pg_temp.assert_true('旧JWTのセッションは失効し履歴は残る',
+ EXISTS(SELECT 1 FROM auth.sessions WHERE id=pg_temp.u('ab02') AND revoked_at IS NOT NULL AND token_hash IS NULL));
+SELECT pg_temp.assert_true('Firebase移行でも監査履歴を保持する',NOT EXISTS(SELECT * FROM old_audit EXCEPT SELECT * FROM audit.events));
+DO $$
+DECLARE t record; actual jsonb;
+BEGIN
+ FOR t IN SELECT * FROM old_business LOOP
+  EXECUTE format('SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text), ''[]''::jsonb) FROM %I.%I r',t.schema_name,t.table_name) INTO actual;
+  PERFORM pg_temp.assert_true(format('Firebase移行前後で %I.%I の内容が同じ',t.schema_name,t.table_name),actual=t.rows);
+ END LOOP;
+END $$;

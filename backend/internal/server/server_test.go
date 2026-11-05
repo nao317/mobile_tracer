@@ -65,6 +65,21 @@ func TestRecover(t *testing.T) {
 	}
 }
 
+func TestRequestLogOmitsOAuthCredentials(t *testing.T) {
+	var logs bytes.Buffer
+	e := New(slog.New(slog.NewJSONHandler(&logs, nil)))
+	e.GET("/api/auth/google/callback", func(c *echo.Context) error { return c.NoContent(204) })
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?code=secret-code&state=secret-state", nil)
+	r.Header.Set("Authorization", "Bearer secret-jwt")
+	r.Header.Set("Cookie", "mt_refresh=secret-refresh")
+	e.ServeHTTP(httptest.NewRecorder(), r)
+	for _, secret := range []string{"secret-code", "secret-state", "secret-jwt", "secret-refresh"} {
+		if bytes.Contains(logs.Bytes(), []byte(secret)) {
+			t.Fatal("credential leaked in request log")
+		}
+	}
+}
+
 type requestLogEntry struct {
 	Method string `json:"method"`
 	URI    string `json:"uri"`

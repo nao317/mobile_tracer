@@ -6,7 +6,7 @@ CREATE TEMP VIEW violations AS
 -- 外部キーのない _id・_by の列。audit.events は消えた行も指せるよう外部キーを張らない
 SELECT '外部キーのない列' AS rule, c.table_schema || '.' || c.table_name || '.' || c.column_name AS target
   FROM information_schema.columns c
- WHERE c.table_schema IN ('app', 'integrity')
+ WHERE c.table_schema IN ('app', 'integrity', 'auth')
    AND (c.column_name ~ '_id$' OR c.column_name ~ '_by(_staff|_participant|_operator)?$')
    AND NOT EXISTS (
      SELECT 1 FROM pg_constraint k
@@ -17,7 +17,7 @@ SELECT '外部キーのない列' AS rule, c.table_schema || '.' || c.table_name
 UNION ALL
 SELECT '配列の列', table_schema || '.' || table_name || '.' || column_name
   FROM information_schema.columns
- WHERE table_schema IN ('app', 'integrity', 'audit') AND data_type = 'ARRAY'
+ WHERE table_schema IN ('app', 'integrity', 'audit', 'auth') AND data_type = 'ARRAY'
 UNION ALL
 -- 案件の下の表を指すのに、case_id を持たない表
 SELECT DISTINCT 'case_id のない表', k.conrelid::regclass::text
@@ -33,7 +33,7 @@ UNION ALL
 -- 中身が正しく更新を止めるかは constraints.sql で確かめる
 SELECT '更新を制限するトリガーがない表', n.nspname || '.' || c.relname
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
- WHERE c.relkind IN ('r', 'p') AND n.nspname IN ('app', 'integrity', 'audit')
+ WHERE c.relkind IN ('r', 'p') AND n.nspname IN ('app', 'integrity', 'audit', 'auth')
    AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                     WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                       AND t.tgenabled IN ('O', 'A')
@@ -45,7 +45,7 @@ SELECT '更新を制限するトリガーがない表', n.nspname || '.' || c.re
 UNION ALL
 SELECT 'TRUNCATE を止めるトリガーがない表', n.nspname || '.' || c.relname
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
- WHERE c.relkind IN ('r', 'p') AND n.nspname IN ('app', 'integrity', 'audit')
+ WHERE c.relkind IN ('r', 'p') AND n.nspname IN ('app', 'integrity', 'audit', 'auth')
    AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                     WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                       AND t.tgenabled IN ('O', 'A')
@@ -56,7 +56,7 @@ SELECT 'TRUNCATE を止めるトリガーがない表', n.nspname || '.' || c.re
 UNION ALL
 SELECT 'id があるのに created_at がない表', n.nspname || '.' || c.relname
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
- WHERE c.relkind IN ('r', 'p') AND n.nspname IN ('app', 'integrity', 'audit')
+ WHERE c.relkind IN ('r', 'p') AND n.nspname IN ('app', 'integrity', 'audit', 'auth')
    AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'id')
    AND NOT EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'created_at');
 

@@ -1,5 +1,7 @@
 # ER 図（たたき台）
 
+Firebase認証用の`auth`スキーマ6表は、[テーブル一覧の認証・セッション](tables.md#firebase認証とセッション)と[Migration 4](../../backend/db/migrations/000004_firebase_auth.up.sql)を参照してください。以下は業務・検証・監査の関係を示します。
+
 [tables.md](tables.md) のテーブル案を、四つの範囲に分けて描いています。列は主キー、外部キー、状態など関係を読むのに必要なものだけを載せています。全列は [初期 DDL](../../backend/db/migrations/000001_init.up.sql)、保存日数設定の廃止は [000002](../../backend/db/migrations/000002_remove_retention_policies.up.sql) を見てください。
 
 - ほぼすべてのテーブルが `tenant_id` を持ち、複合外部キーで同じ顧客の行だけを指します。図では `tenant_id` と `tenants` への線を省いています。

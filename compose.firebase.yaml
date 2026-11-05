@@ -1,0 +1,7 @@
+# Real Firebase project: Web configuration comes from .env; credentials stay server-only.
+services:
+  backend:
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-admin.json
+    volumes:
+      - ${FIREBASE_CREDENTIALS_FILE:?Set path to untracked Firebase Admin service account JSON}:/run/secrets/firebase-admin.json:ro

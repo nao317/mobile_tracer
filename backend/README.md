@@ -2,7 +2,7 @@
 
 Go・Echoで動くAPIです。`GET /api/health` はAPI単体の稼働を確認し、HTTP 200と `{"status":"ok"}` を返します。`GET /api/ready` はPostgreSQLへの接続と、Tapyrus Core・Esploraの接続・索引の準備状態を確認します。ComposeではNginx経由でアクセスします。
 
-車両・案件・記録・下書きの基本操作APIも実装しています。エンドポイント、検索クエリ、JSON形式、権限、エラー、開発用データと操作例は[フロントエンド向けAPI仕様](../docs/api.md)を参照してください。業務APIの開発認証は、明示的に設定するまで無効です。本番の認証プロバイダーとの接続は後続実装です。
+車両・案件・記録・下書きの基本操作APIも実装しています。エンドポイント、検索クエリ、JSON形式、権限、エラー、開発用データと操作例は[フロントエンド向けAPI仕様](../docs/api.md)を参照してください。Firebase Authenticationのメール・パスワードとGoogleログインに対応しており、設定・担当者への紐付け・Firebaseの設定と確認手順は[認証の手順](../docs/auth.md)に記載しています。
 
 HTTPの受付は `internal/server/business.go`、業務処理は `internal/business/service.go` と `rules.go`、DBアクセスは `internal/business/repository*.go` に分けています。リクエスト・レスポンスの型は `internal/business/types.go` で、DBへの保存・読取用の型とは分けています。
 
@@ -65,6 +65,8 @@ curl -i http://localhost:9000/api/health
 通常はNginxだけをホストに公開します。APIへ直接接続する場合は `docker compose -f compose.yaml -f compose.debug.yaml up --build --wait --wait-timeout 180` を使い、`http://localhost:8081/api/health` で確認します。コンテナ内のAPIポートは8080固定です。
 
 ## DB
+
+Firebase認証・セッションの設定、担当者への紐付け、システム管理者の指定は[認証の手順](../docs/auth.md)を参照してください。Migration 3で追加した`auth`スキーマを、Migration 4でFirebaseへ移行します。
 
 `docker compose up` で PostgreSQL 17（`db`）も起動し、`db-migrate` が `db/migrations` の未適用分を流して終了します。APIはマイグレーション完了後に起動し、GORMとPostgreSQLドライバーで接続します。DBのパスワードは `scripts/init.sh` が `.env` に作ります。テーブルの作成・変更は既存のSQLマイグレーションで管理し、GORMのAutoMigrateは使いません。
 
