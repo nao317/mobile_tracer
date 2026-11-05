@@ -17,13 +17,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/labstack/echo/v5"
+	"github.com/nao317/mobile_tracer/backend/internal/authn"
 	"github.com/nao317/mobile_tracer/backend/internal/business"
 	"github.com/nao317/mobile_tracer/backend/internal/config"
 )
 
 const principalKey = "business.principal"
 
-func RegisterBusiness(e *echo.Echo, service *business.Service, auth config.BusinessAuth) {
+func RegisterBusiness(e *echo.Echo, service *business.Service, auth config.BusinessAuth, identities ...*authn.Service) {
 	previous := e.HTTPErrorHandler
 	e.HTTPErrorHandler = func(c *echo.Context, err error) {
 		if response, _ := echo.UnwrapResponse(c.Response()); response != nil && response.Committed {
@@ -53,18 +54,23 @@ func RegisterBusiness(e *echo.Echo, service *business.Service, auth config.Busin
 	group := e.Group("/api", func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			c.Response().Header().Set("Cache-Control", "no-store")
-			if auth.Environment != "development" || auth.Token == "" || !business.ValidID(auth.StaffID) {
-				return business.Unauthorized()
-			}
-			header := c.Request().Header.Get("Authorization")
-			parts := strings.Fields(header)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || subtle.ConstantTimeCompare([]byte(parts[1]), []byte(auth.Token)) != 1 {
-				return business.Unauthorized()
-			}
 			ctx, cancel := context.WithTimeout(c.Request().Context(), 10*time.Second)
 			defer cancel()
 			c.SetRequest(c.Request().WithContext(ctx))
-			p, err := service.ResolveStaff(ctx, auth.StaffID)
+			var p business.Principal
+			var err error
+			if len(identities) > 0 && identities[0].Enabled() {
+				p, err = identities[0].AuthorizeBusiness(c.Request())
+			} else {
+				if auth.Environment != "development" || auth.Token == "" || !business.ValidID(auth.StaffID) {
+					return business.Unauthorized()
+				}
+				parts := strings.Fields(c.Request().Header.Get("Authorization"))
+				if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || subtle.ConstantTimeCompare([]byte(parts[1]), []byte(auth.Token)) != 1 {
+					return business.Unauthorized()
+				}
+				p, err = service.ResolveStaff(ctx, auth.StaffID)
+			}
 			if err != nil {
 				return err
 			}

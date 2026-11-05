@@ -1,0 +1,29 @@
+# Development only. This uses unsigned emulator credentials, never a real Firebase project.
+services:
+  firebase-auth:
+    build: ./docker/firebase
+    ports:
+      - "127.0.0.1:9099:9099"
+    volumes:
+      - firebase-auth-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9099/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  backend:
+    environment:
+      APP_ENV: development
+      AUTH_PUBLIC_URL: http://localhost:${NGINX_PORT:-8080}
+      FIREBASE_PROJECT_ID: demo-mobile-tracer
+      FIREBASE_API_KEY: demo-api-key
+      FIREBASE_AUTH_DOMAIN: demo-mobile-tracer.firebaseapp.com
+      FIREBASE_APP_ID: demo-app-id
+      FIREBASE_AUTH_EMULATOR_HOST: firebase-auth:9099
+      FIREBASE_AUTH_EMULATOR_URL: http://localhost:9099
+      AUTH_SESSION_TTL: 120h
+    depends_on:
+      firebase-auth:
+        condition: service_healthy
+volumes:
+  firebase-auth-data:

@@ -24,6 +24,12 @@ Open `http://localhost:8080/`; `/api/` requests on that origin go to the Go API.
 The frontend runs as a Node SSR server on internal port 3000.
 See the [root README](../README.md) for optional direct access with `compose.debug.yaml`.
 
+### Firebaseログイン
+
+`/login`でメール・パスワード認証またはGoogleログインを行い、`/account`で所属を選択・ログアウトします。`/admin`はGo APIでもシステム管理者の権限を確認します。FirebaseのWebアプリ設定は公開設定としてGo APIから取得します。サービスアカウント秘密鍵はGo API側だけに設定します。
+
+SSRは`API_INTERNAL_URL`へCookieを転送します。Composeでは`http://backend:8080`、フロントだけをホストで開発する場合は通常`http://localhost:8081`です。`AUTH_PUBLIC_URL`はブラウザーが利用するオリジンに合わせます。セッション作成などの`/api/`へのアクセスも同じオリジンへ転送する構成にしてください。設定と手動確認は[認証の手順](../docs/auth.md)を参照してください。
+
 ### Installation
 
 Install the dependencies:

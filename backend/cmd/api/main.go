@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nao317/mobile_tracer/backend/internal/authn"
 	"github.com/nao317/mobile_tracer/backend/internal/business"
 	"github.com/nao317/mobile_tracer/backend/internal/config"
 	"github.com/nao317/mobile_tracer/backend/internal/database"
@@ -37,6 +38,10 @@ func main() {
 
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr error) {
 	apiAuth, err := config.LoadBusinessAuth()
+	if err != nil {
+		return err
+	}
+	identityCfg, err := config.LoadAuth()
 	if err != nil {
 		return err
 	}
@@ -67,12 +72,21 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 			return err
 		}
 	}
+	e := server.New(logger, db.Ping, readiness)
+	var provider authn.Provider
+	if identityCfg.Enabled {
+		provider, err = authn.Firebase(ctx, identityCfg)
+		if err != nil {
+			return fmt.Errorf("initialize Firebase Authentication: %w", err)
+		}
+	}
 	listener, err := net.Listen("tcp", net.JoinHostPort("", cfg.Port))
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	e := server.New(logger, db.Ping, readiness)
-	server.RegisterBusiness(e, business.New(db.GORM), apiAuth)
+	identities := authn.New(db.GORM, identityCfg, provider, logger)
+	server.RegisterBusiness(e, business.New(db.GORM), apiAuth, identities)
+	identities.Register(e)
 	server.ConfigureProxy(e, proxies)
 	srv := &http.Server{
 		Handler:           e,
