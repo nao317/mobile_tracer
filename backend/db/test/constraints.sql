@@ -901,14 +901,10 @@ SELECT pg_temp.ng('共有した側の担当者が受け入れる', $q$
   '23503', 'share_grants_recipient_tenant_id_accepted_by_fkey');
 
 -- ---------------------------------------------------------------
--- 保存期間と削除
+-- 期間経過による自動削除は行わず、個別の削除申請を管理する
 -- ---------------------------------------------------------------
-SELECT pg_temp.ok('保存期間を決めて直す', $q$
-  INSERT INTO app.retention_policies (tenant_id, target_kind) VALUES (pg_temp.u('a'), 'media');
-  UPDATE app.retention_policies SET retain_days = 365, basis = '契約' WHERE tenant_id = pg_temp.u('a') $q$);
-SELECT pg_temp.ng('保存期間の対象を変える', $q$
-  UPDATE app.retention_policies SET target_kind = 'record' WHERE tenant_id = pg_temp.u('a') $q$,
-  'P0001', expected_message => 'app.retention_policies の target_kind は変更できません');
+SELECT pg_temp.assert_true('保存日数の設定テーブルは廃止されている',
+  to_regclass('app.retention_policies') IS NULL);
 
 SELECT pg_temp.ng('案件と関係者の両方を消す申請', $q$
   INSERT INTO app.deletion_requests (tenant_id, case_id, party_id, reason, created_by)
@@ -916,7 +912,7 @@ SELECT pg_temp.ng('案件と関係者の両方を消す申請', $q$
   '23514', 'deletion_requests_check');
 SELECT pg_temp.ok('削除を申請し、保留して、承認して実行する', $q$
   INSERT INTO app.deletion_requests (id, tenant_id, case_id, reason, created_by)
-  VALUES (pg_temp.u('dd1'), pg_temp.u('a'), pg_temp.u('5a2'), '保存期間の満了', pg_temp.u('1a1'));
+  VALUES (pg_temp.u('dd1'), pg_temp.u('a'), pg_temp.u('5a2'), '誤登録した個人情報の削除申請', pg_temp.u('1a1'));
   UPDATE app.deletion_requests SET status = 'on_hold', hold_reason = '異議の対応中' WHERE id = pg_temp.u('dd1');
   UPDATE app.deletion_requests SET status = 'approved', hold_reason = NULL, decided_by = pg_temp.u('1a2'),
                                    decided_at = now() WHERE id = pg_temp.u('dd1');
@@ -1161,3 +1157,67 @@ SELECT pg_temp.ok('移した案件の下書きを新しい構成版へ移して�
 SELECT pg_temp.ng('提出済みの版を新しい構成版へ移す', $q$
   UPDATE app.record_versions SET configuration_version_id = pg_temp.u('3a5') WHERE id = pg_temp.u('8a1') $q$,
   'P0001', expected_message => '提出済みの記録版は変更・削除できません');
+
+-- ---------------------------------------------------------------
+-- Google 認証・セッション（業務記録の保存期限とは別）
+-- ---------------------------------------------------------------
+SELECT pg_temp.ok('Google の本人識別子を登録する', $q$
+  INSERT INTO auth.users(id,issuer,subject,email,email_verified)
+  VALUES (pg_temp.u('aa01'),'https://accounts.google.com','google-db-test','person@example.invalid',true) $q$);
+SELECT pg_temp.ng('同じ Google の本人識別子を重複登録する', $q$
+  INSERT INTO auth.users(issuer,subject) VALUES ('https://accounts.google.com','google-db-test') $q$,
+  '23505','users_issuer_subject_key');
+SELECT pg_temp.ng('登録済みの本人識別子を差し替える', $q$
+  UPDATE auth.users SET subject='another-user' WHERE id=pg_temp.u('aa01') $q$,
+  'P0001',expected_message => 'auth.users の subject は変更できません');
+SELECT pg_temp.ng('担当者への紐付けで別顧客の担当者を指定する', $q$
+  INSERT INTO auth.staff_links(user_id,tenant_id,staff_id) VALUES(pg_temp.u('aa01'),pg_temp.u('a'),pg_temp.u('1b1')) $q$,
+  '23503','staff_links_tenant_id_staff_id_fkey');
+SELECT pg_temp.ok('担当者への紐付けを登録し取り消す', $q$
+  INSERT INTO auth.staff_links(id,user_id,tenant_id,staff_id) VALUES(pg_temp.u('aa02'),pg_temp.u('aa01'),pg_temp.u('a'),pg_temp.u('1a1'));
+  UPDATE auth.staff_links SET revoked_at=now() WHERE id=pg_temp.u('aa02') $q$);
+SELECT pg_temp.ng('取り消した紐付けを戻す', $q$
+  UPDATE auth.staff_links SET revoked_at=NULL WHERE id=pg_temp.u('aa02') $q$,
+  'P0001',expected_message => 'auth.staff_links のこの行は変更・削除できません');
+SELECT pg_temp.ok('セッションとハッシュ化済みの更新トークンを保存する', $q$
+  INSERT INTO auth.sessions(id,user_id,csrf_hash,expires_at) VALUES(pg_temp.u('aa03'),pg_temp.u('aa01'),repeat('a',64),now()+interval '1 hour');
+  INSERT INTO auth.refresh_tokens(token_hash,session_id,expires_at) VALUES(repeat('b',64),pg_temp.u('aa03'),now()+interval '1 hour');
+  UPDATE auth.refresh_tokens SET used_at=now() WHERE token_hash=repeat('b',64) $q$);
+SELECT pg_temp.ng('更新トークンに平文を保存する', $q$
+  INSERT INTO auth.refresh_tokens(token_hash,session_id,expires_at) VALUES('raw-refresh-token',pg_temp.u('aa03'),now()+interval '1 hour') $q$,
+  '23514','refresh_tokens_token_hash_check');
+SELECT pg_temp.ng('使用済みの更新トークンを再利用可能に戻す', $q$
+  UPDATE auth.refresh_tokens SET used_at=NULL WHERE token_hash=repeat('b',64) $q$,
+  'P0001',expected_message => 'auth.refresh_tokens のこの行は変更・削除できません');
+SELECT pg_temp.ok('セッションを失効させる', $q$
+  UPDATE auth.sessions SET revoked_at=now() WHERE id=pg_temp.u('aa03') $q$);
+SELECT pg_temp.ng('失効済みのセッションを復活させる', $q$
+  UPDATE auth.sessions SET revoked_at=NULL WHERE id=pg_temp.u('aa03') $q$,
+  'P0001',expected_message => 'auth.sessions のこの行は変更・削除できません');
+SELECT pg_temp.ng('認証の履歴を TRUNCATE する', $q$
+  TRUNCATE auth.refresh_tokens $q$,
+  'P0001',expected_message => 'auth.refresh_tokens は TRUNCATE できません');
+
+-- Firebase identities and single-use login challenges.
+SELECT pg_temp.ok('Firebase UIDをプロジェクトごとに登録する', $q$
+  INSERT INTO auth.users(id,issuer,subject) VALUES(pg_temp.u('fa01'),'https://securetoken.google.com/demo-mobile-tracer','firebase-uid');
+  INSERT INTO auth.users(issuer,subject) VALUES('https://securetoken.google.com/other-project','firebase-uid') $q$);
+SELECT pg_temp.ng('同じFirebaseプロジェクトとUIDを重複登録する', $q$
+  INSERT INTO auth.users(issuer,subject) VALUES('https://securetoken.google.com/demo-mobile-tracer','firebase-uid') $q$,
+  '23505','users_issuer_subject_key');
+SELECT pg_temp.ng('不正なFirebase発行者を登録する', $q$
+  INSERT INTO auth.users(issuer,subject) VALUES('https://evil.example/project','uid') $q$,
+  '23514','users_issuer_check');
+SELECT pg_temp.ok('Firebase Cookieのハッシュとチャレンジを保存する', $q$
+  INSERT INTO auth.sessions(id,user_id,csrf_hash,token_hash,expires_at) VALUES(pg_temp.u('fa02'),pg_temp.u('fa01'),repeat('c',64),repeat('d',64),now()+interval '1 hour');
+  INSERT INTO auth.login_challenges(challenge_hash,browser_hash,expires_at) VALUES(repeat('e',64),repeat('f',64),now()+interval '5 minutes');
+  UPDATE auth.login_challenges SET used_at=now() WHERE challenge_hash=repeat('e',64) $q$);
+SELECT pg_temp.ng('Firebase Cookieの平文を保存する', $q$
+  INSERT INTO auth.sessions(user_id,csrf_hash,token_hash,expires_at) VALUES(pg_temp.u('fa01'),repeat('c',64),'raw-cookie',now()+interval '1 hour') $q$,
+  '23514','sessions_token_hash_check');
+SELECT pg_temp.ng('セッションのCookieハッシュを差し替える', $q$
+  UPDATE auth.sessions SET token_hash=repeat('e',64) WHERE id=pg_temp.u('fa02') $q$,
+  'P0001',expected_message => 'auth.sessions の token_hash は変更できません');
+SELECT pg_temp.ng('ログインチャレンジを再利用可能に戻す', $q$
+  UPDATE auth.login_challenges SET used_at=NULL WHERE challenge_hash=repeat('e',64) $q$,
+  'P0001',expected_message => 'auth.login_challenges のこの行は変更・削除できません');

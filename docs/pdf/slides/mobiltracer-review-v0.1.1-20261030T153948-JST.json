@@ -1,0 +1,231 @@
+{
+  "deck_version": "0.1.1",
+  "requirements_version": "0.3.0",
+  "generated_at_jst": "2026-10-30T15:39:48+09:00",
+  "file": "mobiltracer-review-v0.1.1-20261030T153948-JST.pdf",
+  "source": "docs/03_marp_mobiltracer-review.md",
+  "source_sha256": "40085522efe906fac99213e6c222158325d1d21a1f577b5e98d2bbd5e6aeaabe",
+  "requirements_sha256": "f182b0ea20da58e7c48c9486760b327fb13efadf51764019ff2cbea67961bd30",
+  "inputs_sha256": "3b8d79194a73c9367b52fd3f49d9cdaf69d04bb050aa6bbd126268198e2301de",
+  "inputs": {
+    "scripts/slides/build.mjs": "c4caece480006b27175a92bcdbbb3b50764de3495b320add8d4bd32953e884ad",
+    "scripts/slides/validate.py": "752fe98a105f49aee1a4fd64540d41aec7c2cea741280544e0ea7fcd980ec0ac",
+    "scripts/slides/package-lock.json": "9b50a31925d372c611af1bbf56a78880a9bd84b480564558d84fd78afe275796",
+    "scripts/slides/themes/classmethod.css": "d9be5deadaf9f43bf3fb9aac66ad9c07f07e5e6d266495ef8f7680e2054d2e65",
+    "scripts/slides/themes/mobiltracer.css": "7df62101b7c86fb11aa482ec3ed09814a6a8e43f0500e847c7ee0686a8ab5115",
+    "docs/assets/slides/layers.svg": "2cb801112f14e4945619821109d6fa6b73742a67138f61d627314ce3956dddcc",
+    "docs/assets/slides/versions.svg": "5113f83c87d8298ae3e879ff72d623fea7ae47257d6d981468e9b973966e876b",
+    "docs/assets/slides/states.svg": "4ed27631f0ddb29d489496ad0bf21faaf8a8b1fed7bc371ef2cef2fae1fe1496",
+    "docs/assets/slides/rental.svg": "218f6e7ac49bad9dbef606ea4648a3b48ce5975127e1280da8fb9a9b087207f3",
+    "docs/assets/slides/sales.svg": "3bccf5a62dd5469cc579ccb0b9d452a6cd9841aaf93357d1b7daea2c6dc51542",
+    "docs/assets/slides/repair.svg": "1edbddf02060338ea20bbdce93169e9e245fbfc7ead0f25cbafb5f7c2cf90da2",
+    "docs/assets/slides/sharing.svg": "75ab7593e618a3d26feb5c6447cfd5976dc434da514c93021b9e50080342f4ae"
+  },
+  "slides": 18,
+  "pdf_sha256": "fb7e464116249a0b157adb3670b21937bef88c38c384c7a875b7ca3b3b0379e0",
+  "render_environment": {
+    "node": "v24.22.1",
+    "chromium": "156.0.8078.4",
+    "font_sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a"
+  },
+  "expected": [
+    {
+      "title": "MobilTracer 要件レビュー",
+      "text": "MobilTracer 要件レビュー\n\n車両の記録・共有・確認・検証\n\n三業態で共通基盤を使うための要件をレビューする\n\n要件定義書 v0.3.0 ／ 説明資料 v0.1.1\n\n検討案・顧客承認前",
+      "paginate": false,
+      "typography": {
+        "heading": "88px",
+        "lead": null,
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "同じ記録を後から確かめる",
+      "text": "同じ記録を後から確かめる\n\n車両の状態を、関係者が確認できる記録へ変える。\n\n預ける前後の状態を残す\n同じ内容を相手へ提示する\n提示内容と回答を後から確認する\n\n顧客：導入する事業者\n\n利用者：借受人・購入者・修理依頼者\n\n提供側：MobilTracerを構築・保守する主体\n\n参照：要件定義書 第2・3章 ／ 発表資料 p.2・4",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": "44px",
+        "table": null
+      }
+    },
+    {
+      "title": "三層で顧客に合わせる",
+      "text": "三層で顧客に合わせる\n\n共通基盤を保ち、業務と顧客設定を組み合わせて提供する。\n\n共通基盤\n\n記録・共有・確認・検証\n\n業務モジュール\n\n貸出・販売・修理\n\n顧客別設定\n\n項目・撮影・承認・期限\n\n参照：第5・9章 ／ FR-T01・FR-T02・CON-003",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "設定と追加開発の境界",
+      "text": "設定と追加開発の境界\n\n顧客要望を、標準・設定・追加モジュール・個別開発に分けて判断する。\n\n標準\n\n提出版・権限・監査\n\n設定\n\n撮影箇所・必須項目・承認順\n\n追加モジュール\n\n再利用できる業務能力\n\n個別開発\n\n設定等で表せない顧客固有要件\n\n8方向撮影・24時間の異議受付は、初期設定の候補。\n\n参照：第5章 ／ FR-C05・FR-C13・FR-T02・FR-T03",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "記録・合意・検証を分ける",
+      "text": "記録・合意・検証を分ける\n\n何が残り、何に同意し、何を確かめられるか",
+      "paginate": false,
+      "typography": {
+        "heading": "76px",
+        "lead": null,
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "署名がなくても記録を残す",
+      "text": "署名がなくても記録を残す\n\n相手の回答に関係なく、提出時点の内容を固定して保存する。\n\n提出版は変更不可\n無回答・拒否でも提出版を保持\n訂正は元版を残して追記\n参照：FR-C07・FR-C08・FR-C11 ／ AC-03・AC-09",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": "40px",
+        "table": null
+      }
+    },
+    {
+      "title": "確認の意味を分ける",
+      "text": "確認の意味を分ける\n\n閲覧・受領・状態同意・作業承認を混同しない。\n\n閲覧\n\n内容を表示した\n\n受領\n\n記録を受け取った\n\n状態同意\n\n提示された状態へ同意した\n\n作業承認\n\n対象作業の実施を認めた\n\n回答は、記録版・確認文面・回答者に結びつける。\n\n参照：FR-C08・FR-M03 ／ AC-02・AC-09",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "完了を一つの状態にしない",
+      "text": "完了を一つの状態にしない\n\n業務・記録・回答・異議・検証の状態を併記する。\n\n業務完了は、双方同意や登録完了を意味しない。\n\n参照：第9章 ／ FR-C10・FR-C13・AC-08",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "検証できる範囲を示す",
+      "text": "検証できる範囲を示す\n\n登録後の変更の検出と、撮影内容や責任の証明を区別する。\n\n照合の対象\n\n原本と独立基準の比較\n\n差し替えの検出\n\n基準・原本不足時の検証不能\n\n別途の確認が必要\n\n撮影内容の真実性\n\n傷の責任\n\n請求の妥当性・法的効力\n\nTapyrusは技術候補。登録状態と照合結果も分ける。\n\n参照：FR-C09・FR-C10・NFR-03・NFR-12・AC-04 ／ 発表資料 p.13",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "三業態で共通基盤を確かめる",
+      "text": "三業態で共通基盤を確かめる\n\n貸出・納車・修理の代表フローで確認する",
+      "paginate": false,
+      "typography": {
+        "heading": "76px",
+        "lead": null,
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "貸出前後の状態を比べる",
+      "text": "貸出前後の状態を比べる\n\n同じ箇所で記録・比較し、確認と異議を残す。\n\n状態・燃料・距離・備品を記録\n借受人へ提示して回答\n返却時に比較し、異議も保全\n参照：FR-M01・FR-C06・FR-C13 ／ AC-01・AC-03・AC-15",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": "40px",
+        "table": null
+      }
+    },
+    {
+      "title": "選んだ履歴を購入者へ共有",
+      "text": "選んだ履歴を購入者へ共有\n\n仕入・整備・納車の履歴から、必要な範囲を購入者へ提示する。\n\n仕入・下取時の状態を記録\n整備履歴から共有範囲を選択\n納車版への受領・同意を確認\n参照：FR-M02・FR-C18 ／ AC-01・AC-06",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": "40px",
+        "table": null
+      }
+    },
+    {
+      "title": "承認した作業範囲を残す",
+      "text": "承認した作業範囲を残す\n\n当初見積と追加作業の承認を、別の対象として残す。\n\n入庫時の状態と依頼を記録\n見積の内容・金額を承認\n追加作業は別途承認\n参照：FR-M03・FR-C08 ／ AC-01・AC-09",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": "40px",
+        "table": null
+      }
+    },
+    {
+      "title": "履歴と公開範囲を分ける",
+      "text": "履歴と公開範囲を分ける\n\n履歴を引き継ぐことと、過去の個人情報の公開を分ける。\n\n内部識別子で車両を追跡\n所有者変更で自動公開しない\n相手・版・項目・期間で限定\n参照：FR-C02・FR-C12・FR-C17・FR-C18 ／ AC-06・AC-13",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": "40px",
+        "table": null
+      }
+    },
+    {
+      "title": "MVPで確かめる五つの条件",
+      "text": "MVPで確かめる五つの条件\n\n記録・共有・確認・検証の中核価値を実証する。\n\n三業態を共通基盤と設定で実行\n提示内容と回答を後から閲覧\n署名拒否・異議でも提出版を保持\n写真差し替えを検出\n設定変更から他社・確定版を保護\n参照：第11・12章 ／ GOAL-001〜GOAL-004・AC-01〜AC-05",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": "44px",
+        "table": null
+      }
+    },
+    {
+      "title": "拡張機能は段階を分ける",
+      "text": "拡張機能は段階を分ける\n\n中核実証の範囲と、導入後に選ぶ拡張を区別する。\n\n導入後に検討\n\n動画・大量移行、\n高度な承認・通知、外部連携は、\n導入検証後に選ぶ。\n\n将来の確認支援\n\nAIは、傷・変化の候補、\n撮影品質、入力の確認を\n支援する候補。\n\nAIなしで基本業務を実行。責任・請求の自動決定は対象外。\n\n参照：第4・11章 ／ FR-T07・FR-A01・CON-001・CON-002",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": null,
+        "table": null
+      }
+    },
+    {
+      "title": "導入前に決める四つの条件",
+      "text": "導入前に決める四つの条件\n\n本人確認、検証方式、保存・共有、非機能条件を合意して進む。\n\n論点\t決める内容\n本人確認・署名\t回答者の確認方法、承認の意味\n検証基盤\t方式・運用主体・障害時対応\n保存・共有\t継続保存・個別削除・本人控え\n性能・復旧\t規模・回線・復旧目標・サポート\n\n数値は提案。予算・体制・日程も実装計画の前に確認する。\n\n参照：第10・13章 ／ OQ-001・OQ-002・OQ-003・OQ-006・OQ-007・OQ-010",
+      "paginate": true,
+      "typography": {
+        "heading": "58px",
+        "lead": "42px",
+        "list": null,
+        "table": "38px"
+      }
+    },
+    {
+      "title": "レビューで合意すること",
+      "text": "レビューで合意すること\n\n業務の適合、MVPの範囲、未決事項の決め方を確認する。\n\n代表フローに不足はないか\n\nMVPの五条件で何を確かめるか\n\n未決事項を誰が・いつ決めるか\n\n詳細：要件定義書 v0.3.0 ／ 第1・12・13章",
+      "paginate": true,
+      "typography": {
+        "heading": "72px",
+        "lead": "38px",
+        "list": null,
+        "table": null
+      }
+    }
+  ]
+}

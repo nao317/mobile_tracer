@@ -6,10 +6,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 db="mobile_tracer_test_$$"
+upgrade_db="${db}_upgrade"
 psql=(psql -X -q -v ON_ERROR_STOP=1)
 
 "${psql[@]}" -d postgres -c "CREATE DATABASE $db"
-trap '"${psql[@]}" -d postgres -c "DROP DATABASE IF EXISTS $db"' EXIT
+trap '"${psql[@]}" -d postgres -c "DROP DATABASE IF EXISTS $upgrade_db"; "${psql[@]}" -d postgres -c "DROP DATABASE IF EXISTS $db"' EXIT
 
 # golang-migrate と同じく、1 ファイルを一つのトランザクションで流す
 for f in migrations/*.up.sql; do
@@ -23,6 +24,11 @@ out=$("${psql[@]}" -d "$db" -f test/constraints.sql -f test/rules.sql 2>&1) || s
 # 同時実行のテストは constraints.sql で作った行を使うので、通ったときだけ流す
 if [[ $status -eq 0 ]]; then
   out+=$'\n'$(bash test/concurrency.sh "$db" 2>&1) || status=$?
+fi
+# 初期版にデータがある DB からの移行も、別の一時 DB で確認する。
+if [[ $status -eq 0 ]]; then
+  "${psql[@]}" -d postgres -c "CREATE DATABASE $upgrade_db"
+  out+=$'\n'$("${psql[@]}" -1 -d "$upgrade_db" -f test/upgrade.sql 2>&1) || status=$?
 fi
 ok=$(grep -c 'OK:' <<<"$out" || true)
 ng=$(grep -E 'NG:|ERROR:' <<<"$out" || true)

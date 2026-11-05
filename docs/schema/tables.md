@@ -1,21 +1,25 @@
 # テーブル案（たたき台）
 
-Issue #15 のスキーマ設計のたたき台です。要件定義書 [design.md](../design.md) v0.2.0 の第7〜10章をもとにしています。確定したものではなく、レビューで直す前提の案です。
+Issue #15 のスキーマ設計をもとに、要件定義書 [design.md](../design.md) v0.3.0 の第7〜10章と継続保存の方針を反映しています。顧客とのレビューで直す前提の案です。
 
-- DDL: [000001_init.up.sql](../../backend/db/migrations/000001_init.up.sql)（PostgreSQL 14 以上）
+- 初期 DDL: [000001_init.up.sql](../../backend/db/migrations/000001_init.up.sql)（PostgreSQL 14 以上）
+- 保存日数設定の廃止: [000002_remove_retention_policies.up.sql](../../backend/db/migrations/000002_remove_retention_policies.up.sql)
+- Firebase移行: [000004_firebase_auth.up.sql](../../backend/db/migrations/000004_firebase_auth.up.sql)
+- 旧Google認証とセッション: [000003_google_auth.up.sql](../../backend/db/migrations/000003_google_auth.up.sql)
 - ER 図: [er.md](er.md)
 
 要件の変更は先に design.md を改訂します。この文書の内容で要件を確定させません。
 
 ## 方針
 
-### スキーマを三つに分ける
+### 用途ごとにスキーマを分ける
 
 | スキーマ | 内容 | 主な要件 |
 | --- | --- | --- |
 | `app` | 組織、構成版、車両、案件、記録、確認、異議、共有などの業務データ | FR-C01〜C18、FR-T01〜T06 |
 | `integrity` | 検証基準（ハッシュの束と外部登録の状態）と照合結果 | FR-C09、FR-C10、NFR-03、NFR-12 |
 | `audit` | 操作とアクセスの履歴 | FR-C16 |
+| `auth` | Firebaseの本人識別子、担当者への紐付け、セッション、ログインCSRF、旧認証の履歴 | [認証の手順](../auth.md) |
 
 `integrity` と `audit` を分けるのは、アプリが使う DB ロールの権限を変えるためです（後述の「DB ロールと権限」）。
 
@@ -75,6 +79,19 @@ Issue #15 のスキーマ設計のたたき台です。要件定義書 [design.m
 
 `record_entries` は項目を列ではなく1項目1行で持ちます。項目は顧客ごとの構成版で決まり、テーブルの列にできないためです。値の型は構成版の項目定義で確かめます。
 
+## Firebase認証とセッション
+
+| 表 | 役割 |
+| --- | --- |
+| `auth.users` | Firebaseプロジェクトの`issuer`とUID（`subject`）で識別する本人。旧Google識別子も履歴として保持 |
+| `auth.staff_links` | 本人と既存担当者の明示的な対応。顧客・担当者の複合外部キーと、有効な紐付けの一意制約を持つ |
+| `auth.sessions` | ユーザー、選択中の担当者、FirebaseセッションCookieのハッシュ、CSRFハッシュ、有効期限、失効日時 |
+| `auth.login_challenges` | 一回限りのログインCSRFチャレンジと、ブラウザーとの結び付けのハッシュ |
+| `auth.oauth_flows` | 旧Google直接OAuthの履歴。Migration 4以降は利用しない |
+| `auth.refresh_tokens` | 旧アプリJWTの更新履歴。Migration 4以降は利用しない |
+
+Migration 4でFirebaseへ移行します。メールだけで担当者を自動紐付けしません。管理者の判定はサーバーで確認済みメールと環境変数を照合します。パスワードとトークン本体はDBに保存しません。紐付け・チャレンジ・失効済みセッションの履歴はトリガーで保護します。認証期限は業務記録の保存期限ではなく、期間経過による自動削除は行いません。設定は[認証の手順](../auth.md)を参照してください。
+
 ## 再送で重複させない
 
 通信が切れたあとに同じ操作が再送されても二重に登録しないよう、端末やワーカーが作るキーに一意制約を付けます（NFR-06）。
@@ -112,7 +129,7 @@ Tapyrus に送る署名済みのトランザクションは、送る前に `anch
 
 ## テーブル一覧
 
-全部で 46 テーブルです（`app` 41、`integrity` 4、`audit` 1）。列の詳細は DDL を見てください。
+`000004` 適用後は全部で 51 テーブルです（`app` 40、`integrity` 4、`audit` 1、`auth` 6）。列の詳細は DDL を見てください。
 
 ### 組織と権限
 
@@ -219,12 +236,17 @@ Tapyrus に送る署名済みのトランザクションは、送る前に `anch
 
 マスクに指定できるのは、消していない `kind = 'mask'` の注釈だけです。
 
-### 保存期間と削除
+### 継続保存と個別の削除
+
+記録・写真原本・本人控え・共有情報・監査履歴は、期間経過による自動削除を行いません。共有の `expires_at` はアクセス許可の期限であり、記録を削除する期限ではありません。圧縮・アーカイブは別途検討します。
 
 | テーブル | 内容 | 要件 |
 | --- | --- | --- |
-| `retention_policies` | 対象ごとの保存日数と根拠。日数は未定なので NULL を許す | FR-C17 |
 | `deletion_requests` | 削除の申請、保留、承認、実行。対象は案件か社外の人 | FR-C17 |
+
+`000002` で `retention_policies` を廃止します。既存の設定値（NULL を含む）は、削除前に `audit.events` へ顧客ごと・対象ごとに追記します。`action = 'retire_retention_policy'`、`details.policy` に旧設定の全列、`details.migration` に移行名を残します。これは過去の設定の記録で、保存期限の設定としては使いません。監査行の `entry_hash` は、Migration 内で組み立てたイベントの JSONB テキストを UTF-8 にして SHA-256 を計算します。
+
+退避とテーブル廃止は一つのトランザクションで行い、設定テーブルをロックして同時更新を防ぎます。業務記録、原本の参照情報、検証基準、既存の監査履歴、個別の削除申請は変更しません。必要な個別の削除は、理由と承認・実行の経緯を残して扱います。
 
 ### 検証
 
@@ -260,7 +282,8 @@ Tapyrus に送る署名済みのトランザクションは、送る前に `anch
 | ロール | 権限 |
 | --- | --- |
 | マイグレーション用 | スキーマの変更。アプリの実行時には使わない |
-| アプリ用 | `app` の読み書き。`audit` と `integrity.verification_runs` は INSERT と SELECT だけ。TRUNCATE はどの表にも渡さない |
+| アプリ用 | `app` の読み書き。`auth.users`・`auth.login_challenges`・`auth.sessions` の認証処理に必要な読み書きと、`auth.staff_links` の SELECT。`audit` と `integrity.verification_runs` は INSERT と SELECT だけ。TRUNCATE はどの表にも渡さない |
+| 認証の紐付け運用用 | `auth-link`で`auth.users`と`auth.staff_links`を登録・取消しし、`audit.events`へ追記する。通常の業務APIには紐付け変更を公開しない |
 | 登録処理用 | `integrity.anchors`、`integrity.anchor_transactions`、`integrity.anchor_attempts` の読み書き。外部登録のワーカーだけが使う |
 | 閲覧用 | 監査や調査のための SELECT だけ |
 
@@ -288,6 +311,8 @@ DB の中で守るだけでは、提供者から独立した検証にはなり�
 
 [`backend/db/test/run.sh`](../../backend/db/test/run.sh) は、空の DB を作ってマイグレーションを番号順に流し、制約のテスト（`constraints.sql`）、書き方の決まりの確認（`rules.sql`）、同時実行のテスト（`concurrency.sh`）をします。終わったら DB を消します。PostgreSQL 14 以上と psql が要ります。接続先は `PGHOST` などの環境変数で指定し、DB を作れるロールで実行します。
 
+同じスクリプトから別の一時 DB で `test/upgrade.sql` も実行します。初期版に記録・原本の参照情報・検証基準・保存日数設定を入れて `000002` を適用し、旧設定の退避と業務データの保持を確認します。
+
 止まるはずの操作は `pg_temp.ng(ラベル, SQL, SQLSTATE, 制約名)` で書きます。制約で止まるもの（23503 外部キー、23505 一意、23514 CHECK など）は、SQLSTATE と制約の名前を書きます。トリガーで止まるものはどれも SQLSTATE が P0001 になるので、`expected_message =>` でトリガーのエラー文も書きます。比べるのは 000001 のトリガーに書いたエラー文だけで、PostgreSQL 自身のエラー文は比べません。参照先の行がない、列名を間違えたなど、違う理由で止まったときも NG になります。`ng()` の中で作った行は取り消されるので、後のテストの準備には使えません。
 
 通るはずの操作は `pg_temp.ok(ラベル, SQL)` で書きます。UPDATE は対象が 0 件でも成功するので、保存された値まで見たいところは `pg_temp.assert_true(ラベル, 条件)` で確かめます。これらの関数は `helpers.sql` にあります。
@@ -308,7 +333,7 @@ docker compose run --rm db-test
 
 ## 確認したこと
 
-WSL の PostgreSQL 14.18 で `run.sh` を流し、269 件の操作と確認をして、止めるべきものが想定した制約やトリガーで止まり、通すべきものが通ることを確かめました。マイグレーションの最後でわざと失敗させると、表が一つも残らないことも確かめています。compose の PostgreSQL 17.11 でも、golang-migrate で流して 46 表ができること、`db-test` で同じ結果（OK 269 件）になることを確かめました。主なものは次のとおりです。
+初期版は WSL の PostgreSQL 14.18 と compose の PostgreSQL 17.11 で、46 表と 269 件の操作・確認を検証しました。`000002` を含む現行版は専用の PostgreSQL 17 コンテナで `run.sh` を実行し、制約・同時実行・既存 DB の移行を合わせて 317 件の確認が成功しました。移行試験では、旧設定を監査履歴へ退避し、業務データが移行前後で同じであることを確かめています。主な制約の確認内容は次のとおりです。
 
 - 他の顧客の店舗や車両を指して案件を作る、別の案件の写真を記録版に入れる
 - 下書きの構成版で案件を作る、案件と違う構成版で記録版を作る、移した案件を置き換わった構成版へ戻す、移した案件の下書きを旧版のまま提出する
@@ -335,7 +360,7 @@ WSL の PostgreSQL 14.18 で `run.sh` を流し、269 件の操作と確認を�
 | --- | --- | --- |
 | 本人確認と署名の方式、代理回答の条件 | `confirmation_responses` の `identity_method`、`signature_storage_key`、認証用の表 | OQ-001 |
 | Tapyrus に登録する項目、manifest の形式 | `integrity.*` | OQ-002 |
-| 保存期間、異議中の保留、契約終了時の扱い | `retention_policies`、`deletion_requests` | OQ-003 |
+| 継続保存の目的、個別の削除条件、異議中の保留、契約終了時の扱い | `deletion_requests`、`audit.events` | OQ-003 |
 | 一つの案件に複数の車両を持つか | `cases.vehicle_id`（いまは一台） | OQ-004 |
 | 進行中の案件を新しい構成版へ移す条件 | `cases.configuration_version_id`（移す仕組みはある） | OQ-005 |
 | 本人控えの失効後の扱い | `personal_copies`（失効の列はまだない） | OQ-006 |

@@ -16,7 +16,7 @@ python3 scripts/smoke.py
 
 初回のイメージ取得・ビルドにはネットワーク接続が必要です。チェーン自体は単一ノードの `dev` モードで動き、公開テストネット、Faucet、外部Signerには接続しません。承認が必要なときは、開発用の鍵でブロックを生成します。
 
-`scripts/init.sh` は `.env` がなければ `.env.example` から作成し、空のRPCパスワードをランダムな値で補います。続いてCoreを起動し、開発用の署名鍵・ジェネシスブロック・ウォレットを準備して101ブロックを生成します。初期化済みの環境では、同じ鍵とチェーンを使い、ブロックを追加しません。
+`scripts/init.sh` は `.env` がなければ `.env.example` から作成し、空のRPCパスワードをランダムな値で補います。続いてCoreを起動し、開発用の署名鍵・ジェネシスブロック・ウォレットを準備して101ブロックを生成します。初期化済みの環境では、同じ鍵とチェーンを使います。実際の高さが101未満なら不足分を生成し、停止期間が長く同期未完了になっている場合は新しい1ブロックを生成します。高さと同期状態が正常ならブロックを追加しません。
 
 鍵とジェネシスはボリュームに保存します。初期化スクリプトは、既存ボリュームとネットワークID・ウォレット名が異なる場合に停止します。別の環境を用意するには、別のComposeプロジェクト名を使ってください。
 
@@ -126,6 +126,7 @@ docker compose up --build --wait --wait-timeout 180
 | --- | --- |
 | RPCパスワードが未設定と表示される | 最初に `bash scripts/init.sh` を実行する |
 | ネットワークID・ウォレット名の不一致で止まる | 元の設定に戻すか、別のComposeプロジェクトを使用する |
+| `service "nginx" is not running` | `docker compose ps -a`で依存サービスを確認する。EsploraがunhealthyでCoreが同期未完了の場合は`bash scripts/init.sh`を再実行し、`docker compose up -d --wait --wait-timeout 180`で全体を起動してからsmokeテストを実行する |
 | `/api/ready` が503になる | `docker compose ps -a` と `docker compose logs --tail=100 db tapyrusd esplora backend` でDB・Tapyrusの停止、索引の遅れ、接続エラーを調べる |
 | 索引が最新ブロックに追いつかない | Esploraのログを確認する。ブロック生成直後は索引の更新を待つ |
 | ホスト側のポートが使用中 | `.env` の `NGINX_PORT` を変更して起動し直す |

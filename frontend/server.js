@@ -12,7 +12,7 @@ app.set("trust proxy", proxies.length ? proxies : false);
 app.use((req, res, next) => {
   res.on("finish", () => {
     console.log(JSON.stringify({
-      method: req.method, uri: req.originalUrl, status: res.statusCode,
+      method: req.method, uri: req.path, status: res.statusCode,
       host: req.get("host"), remote_ip: req.ip, scheme: req.protocol,
     }));
   });

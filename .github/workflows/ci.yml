@@ -187,7 +187,16 @@ jobs:
       # -count=1でテストキャッシュを使わず、その実行での結果を得る。
       - run: go vet ./...
       - run: go test -race -count=1 ./...
-      - run: go build ./cmd/api ./cmd/tapyrus-check ./cmd/dev-seed
+      - run: go build ./cmd/api ./cmd/tapyrus-check ./cmd/dev-seed ./cmd/auth-link
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '>=24.22.1 <25'
+      - name: Firebase Auth Emulator integration
+        run: |
+          npm install --prefix "$RUNNER_TEMP/firebase-cli" firebase-tools@15.34.2
+          "$RUNNER_TEMP/firebase-cli/node_modules/.bin/firebase" emulators:exec --only auth --project demo-mobile-tracer --config ../firebase.json 'go test -race -count=1 ./internal/authn -run TestFirebaseEmulator'
+
 
   # Compose上でサービス間接続とTapyrusトランザクションを確認する。
   integration:

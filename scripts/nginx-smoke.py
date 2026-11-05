@@ -42,14 +42,14 @@ def fetch(base, path, headers=None, status=200):
         return body, content_type
 
 
-def request_log(service, uri):
+def request_log(service, uri, host):
     output = compose("logs", "--no-color", "--no-log-prefix", "--tail=100", service)
     for line in output.splitlines():
         try:
             entry = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if entry.get("uri") == uri:
+        if entry.get("uri") == uri and entry.get("host") == host:
             return entry
     raise RuntimeError(f"No request log for {service}")
 
@@ -81,13 +81,20 @@ def main():
 
     marker = uuid.uuid4().hex
     query = f"?probe={marker}&value=a%2Fb&value=c%20d"
-    host = "mobile-tracer.local:" + str(urllib.parse.urlsplit(base).port)
+    host = marker + ".mobile-tracer.local:" + str(urllib.parse.urlsplit(base).port)
     headers = {"Host": host, "X-Forwarded-Host": "untrusted.invalid", "X-Forwarded-Proto": "https",
                "X-Forwarded-For": "198.51.100.20", "X-Real-IP": "198.51.100.20"}
     fetch(base, "/api/health" + query, headers)
     fetch(base, "/" + query, headers)
-    api = request_log("backend", "/api/health" + query)
-    web = request_log("frontend", "/" + query)
+    api = request_log("backend", "/api/health", host)
+    web = request_log("frontend", "/", host)
+    # Query strings must reach SSR, while OAuth codes must not enter request logs.
+    login, _ = fetch(base, "/login?error=cancelled&code=do-not-log-this-code", headers)
+    if "ログインがキャンセルされました。" not in login.decode():
+        raise RuntimeError("Login query string was not forwarded to SSR")
+    for service in ("backend", "frontend", "nginx"):
+        if "do-not-log-this-code" in compose("logs", "--no-color", "--no-log-prefix", "--tail=100", service):
+            raise RuntimeError("OAuth code leaked into request logs")
     for entry in (api, web):
         if entry.get("host") != host or not entry.get("remote_ip") or entry["remote_ip"] == "198.51.100.20":
             raise RuntimeError("Forwarded host or IP was not safely preserved")
