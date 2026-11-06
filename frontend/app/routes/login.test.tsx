@@ -11,11 +11,53 @@ beforeEach(()=>{vi.mocked(firebaseAuth).mockResolvedValue({} as Awaited<ReturnTy
 afterEach(()=>{vi.clearAllMocks();vi.unstubAllGlobals();});
 function fill() { fireEvent.change(screen.getByLabelText("メールアドレス"),{target:{value:"person@company.example"}});fireEvent.change(screen.getByLabelText("パスワード"),{target:{value:"long-password"}}); }
 describe("Firebase login",()=>{
- it("offers both email/password and Google",()=>{render(<LoginView config={config} error=""/>);expect(screen.getByLabelText("メールアドレス")).toHaveAttribute("type","email");expect(screen.getByLabelText("パスワード")).toHaveAttribute("type","password");expect(screen.getByRole("button",{name:"Googleでログイン"})).toBeEnabled();});
- it("accepts non-Google email addresses and sends verification",async()=>{render(<LoginView config={config} error=""/>);fill();fireEvent.click(screen.getByRole("button",{name:"メールアドレスでログイン"}));await waitFor(()=>expect(signInWithEmailAndPassword).toHaveBeenCalledWith({},"person@company.example","long-password"));await waitFor(()=>expect(sendEmailVerification).toHaveBeenCalledWith(user));expect(user.getIdToken).not.toHaveBeenCalled();expect(await screen.findByRole("status")).toHaveTextContent("確認メール");expect(signOut).toHaveBeenCalled();});
- it("registers accounts through Firebase",async()=>{render(<LoginView config={config} error=""/>);fireEvent.click(screen.getByRole("button",{name:"新規登録"}));fill();fireEvent.click(screen.getByRole("button",{name:"アカウント登録"}));await waitFor(()=>expect(createUserWithEmailAndPassword).toHaveBeenCalledWith({},"person@company.example","long-password"));});
+ it("switches tabs with the keyboard while keeping the email and clearing the password", () => {
+   render(<LoginView config={config} error="" />);
+   fill();
+   const login = screen.getByRole("tab", { name: "ログイン" });
+   fireEvent.keyDown(login, { key: "ArrowRight" });
+   expect(screen.getByRole("tab", { name: "新規登録" })).toHaveAttribute("aria-selected", "true");
+   expect(screen.getByRole("tab", { name: "新規登録" })).toHaveFocus();
+   expect(screen.getByLabelText("メールアドレス")).toHaveValue("person@company.example");
+   expect(screen.getByLabelText("パスワード")).toHaveValue("");
+   expect(screen.getByLabelText("パスワード")).toHaveAttribute("autocomplete", "new-password");
+   fireEvent.keyDown(screen.getByRole("tab", { name: "新規登録" }), { key: "Home" });
+   expect(login).toHaveAttribute("aria-selected", "true");
+ });
+ it("translates the current form and errors without losing entered credentials", async () => {
+   vi.mocked(signInWithEmailAndPassword).mockRejectedValueOnce({ code: "auth/invalid-credential" });
+   render(<LoginView config={config} error="" />);
+   fill();
+   fireEvent.click(screen.getByRole("button", { name: "English" }));
+   expect(screen.getByLabelText("Email address")).toHaveValue("person@company.example");
+   expect(screen.getByLabelText("Password")).toHaveValue("long-password");
+   expect(document.documentElement.lang).toBe("en");
+   fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+   expect(await screen.findByRole("alert")).toHaveTextContent("Authentication failed");
+   fireEvent.click(screen.getByRole("button", { name: "日本語" }));
+   expect(screen.getByRole("alert")).toHaveTextContent("認証できませんでした");
+   expect(document.documentElement.lang).toBe("ja");
+ });
+ it("offers the Figma login fields and the existing Google login",()=>{render(<LoginView config={config} error=""/>);expect(screen.getByRole("heading",{name:"Mobile Tracer"})).toBeVisible();expect(screen.getByText("ログインID")).toBeVisible();expect(screen.getByLabelText("メールアドレス")).toHaveAttribute("type","email");expect(screen.getByLabelText("メールアドレス")).toHaveAttribute("placeholder","メールアドレス");expect(screen.getByLabelText("パスワード")).toHaveAttribute("type","password");expect(screen.getByRole("button",{name:"ログイン"})).toBeEnabled();expect(screen.getByRole("button",{name:"Googleでログイン"})).toBeEnabled();});
+ it("accepts non-Google email addresses and sends verification",async()=>{render(<LoginView config={config} error=""/>);fill();fireEvent.click(screen.getByRole("button",{name:"ログイン"}));await waitFor(()=>expect(signInWithEmailAndPassword).toHaveBeenCalledWith({languageCode:"ja"},"person@company.example","long-password"));await waitFor(()=>expect(sendEmailVerification).toHaveBeenCalledWith(user));expect(user.getIdToken).not.toHaveBeenCalled();expect(await screen.findByRole("status")).toHaveTextContent("確認メール");expect(signOut).toHaveBeenCalled();});
+ it("registers accounts through Firebase",async()=>{render(<LoginView config={config} error=""/>);fireEvent.click(screen.getByRole("tab", { name: "新規登録" }));fill();fireEvent.click(screen.getByRole("button",{name:"アカウント登録"}));await waitFor(()=>expect(createUserWithEmailAndPassword).toHaveBeenCalledWith({languageCode:"ja"},"person@company.example","long-password"));});
+ it("returns to login after registration so the next submission signs in", async () => {
+   render(<LoginView config={config} error="" />);
+   fireEvent.click(screen.getByRole("tab", { name: "新規登録" }));
+   fill();
+   fireEvent.click(screen.getByRole("button", { name: "アカウント登録" }));
+   expect(await screen.findByRole("status")).toHaveTextContent("確認メールを送信しました");
+   await waitFor(() => expect(screen.getByRole("button", { name: "ログイン" })).toBeEnabled());
+   expect(screen.getByLabelText("メールアドレス")).toHaveValue("person@company.example");
+   expect(screen.getByLabelText("パスワード")).toHaveValue("");
+   expect(screen.getByLabelText("パスワード")).toHaveAttribute("autocomplete", "current-password");
+   fireEvent.change(screen.getByLabelText("パスワード"), { target: { value: "long-password" } });
+   fireEvent.click(screen.getByRole("button", { name: "ログイン" }));
+   await waitFor(() => expect(signInWithEmailAndPassword).toHaveBeenCalledWith({languageCode:"ja"}, "person@company.example", "long-password"));
+   expect(createUserWithEmailAndPassword).toHaveBeenCalledTimes(1);
+ });
  it("uses Firebase Google provider",async()=>{render(<LoginView config={config} error=""/>);fireEvent.click(screen.getByRole("button",{name:"Googleでログイン"}));await waitFor(()=>expect(signInWithPopup).toHaveBeenCalled());});
- it("requests password resets without sending passwords to Go",async()=>{render(<LoginView config={config} error=""/>);fireEvent.click(screen.getByRole("button",{name:"パスワードを忘れた場合"}));fireEvent.change(screen.getByLabelText("メールアドレス"),{target:{value:"person@company.example"}});fireEvent.click(screen.getByRole("button",{name:"再設定メールを送信"}));await waitFor(()=>expect(sendPasswordResetEmail).toHaveBeenCalledWith({},"person@company.example"));expect(await screen.findByRole("status")).toHaveTextContent("再設定");});
+ it("requests password resets without sending passwords to Go",async()=>{render(<LoginView config={config} error=""/>);fireEvent.click(screen.getByRole("button",{name:"パスワードを忘れた場合"}));fireEvent.change(screen.getByLabelText("メールアドレス"),{target:{value:"person@company.example"}});fireEvent.click(screen.getByRole("button",{name:"再設定メールを送信"}));await waitFor(()=>expect(sendPasswordResetEmail).toHaveBeenCalledWith({languageCode:"ja"},"person@company.example"));expect(await screen.findByRole("status")).toHaveTextContent("再設定");});
  it("hides provider details on failures",async()=>{vi.mocked(signInWithPopup).mockRejectedValueOnce({code:"auth/internal-error",message:"secret-provider-detail"});render(<LoginView config={config} error=""/>);fireEvent.click(screen.getByRole("button",{name:"Googleでログイン"}));expect(await screen.findByRole("alert")).not.toHaveTextContent("secret-provider-detail");expect(signOut).toHaveBeenCalled();});
  it("shows configuration unavailable",()=>{render(<LoginView config={null} error=""/>);expect(screen.getByRole("status")).toHaveTextContent("準備ができていません");expect(screen.queryByRole("button",{name:"Googleでログイン"})).not.toBeInTheDocument();});
 });
