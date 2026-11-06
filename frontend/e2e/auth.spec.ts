@@ -1,4 +1,12 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function requireEnabledAuth(page: Page) {
+  if (!process.env.PLAYWRIGHT_BASE_URL) return;
+  const response = await page.request.get("/api/auth/config");
+  expect(response.ok()).toBeTruthy();
+  const { data } = await response.json();
+  test.skip(data.enabled === false, "This deployment has Firebase authentication disabled; standalone E2E covers the login UI.");
+}
 
 test("login has a safe error message and does not reflect query content", async ({ page }) => {
   await page.goto("/login?error=cancelled&code=must-not-be-rendered");
@@ -15,6 +23,7 @@ for (const path of ["/account", "/admin"]) {
 }
 
 test("login and registration share a form, and the selected language survives reload", async ({ page }) => {
+  await requireEnabledAuth(page);
   await page.goto("/login");
   await page.getByLabel("メールアドレス").fill("review@example.com");
   await page.getByRole("tab", { name: "新規登録" }).click();
@@ -36,6 +45,7 @@ test("login and registration share a form, and the selected language survives re
 });
 
 test("compact header stays aligned and themes persist without changing the form", async ({ page }) => {
+  await requireEnabledAuth(page);
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/login");
   await page.getByLabel("メールアドレス").fill("review@example.com");

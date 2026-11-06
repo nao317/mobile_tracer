@@ -52,7 +52,7 @@ const copy = {
 type Language = keyof typeof copy;
 type Theme = "light" | "dark";
 type Failure = "cancelled" | "authUnavailable" | "popup" | "weak" | "rate" | "failed" | "";
-function authError(error: unknown) {
+function authError(error: unknown): Exclude<Failure, ""> {
   const code = error && typeof error === "object" && "code" in error ? error.code : "";
   if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return "cancelled";
   if (code === "auth/popup-blocked") return "popup";
@@ -209,7 +209,10 @@ export function LoginView({ config, error, initialLanguage = "ja", initialTheme 
           <a className="login-home-link" href="/">{t.home}</a>
         </div>
         </div>
-      </> : <p role="status" className="login-unavailable">{t.unavailable}</p>}
+      </> : <>
+        {failure && <p role="alert" className="login-feedback login-feedback--error">{t[failure]}</p>}
+        <p role="status" className="login-unavailable">{t.unavailable}</p>
+      </>}
     </section>
   </main>;
 }

@@ -11,6 +11,14 @@ beforeEach(()=>{vi.mocked(firebaseAuth).mockResolvedValue({} as Awaited<ReturnTy
 afterEach(()=>{vi.clearAllMocks();vi.unstubAllGlobals();});
 function fill() { fireEvent.change(screen.getByLabelText("メールアドレス"),{target:{value:"person@company.example"}});fireEvent.change(screen.getByLabelText("パスワード"),{target:{value:"long-password"}}); }
 describe("Firebase login",()=>{
+ it("shows safe callback errors even when configuration is unavailable", () => {
+   render(<LoginView config={null} error="ログインがキャンセルされました。" />);
+   expect(screen.getByRole("alert")).toHaveTextContent("ログインがキャンセルされました。");
+   expect(screen.getByRole("status")).toHaveTextContent("準備ができていません");
+   expect(screen.queryByLabelText("メールアドレス")).not.toBeInTheDocument();
+   fireEvent.click(screen.getByRole("button", { name: "English" }));
+   expect(screen.getByRole("alert")).toHaveTextContent("Sign-in was cancelled.");
+ });
  it("switches tabs with the keyboard while keeping the email and clearing the password", () => {
    render(<LoginView config={config} error="" />);
    fill();
