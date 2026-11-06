@@ -1,0 +1,83 @@
+# Use only via scripts/public.sh, after compose.yaml and compose.firebase.yaml.
+# Requires Docker Compose >= 2.24.4. No host port is published.
+x-daemon: &daemon
+  restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  nginx:
+    <<: *daemon
+    ports: !reset []
+    volumes:
+      - ./docker/nginx/public.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/includes:/etc/nginx/mobile-tracer:ro
+    networks:
+      default:
+        ipv4_address: ${PUBLIC_PROXY_IP:-172.30.72.2}
+      tunnel:
+
+  frontend:
+    <<: *daemon
+    ports: !reset []
+    environment:
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:?Set HTTPS origin in .env.public}
+      TRUSTED_PROXY_CIDRS: ${PUBLIC_PROXY_IP:-172.30.72.2}/32
+
+  backend:
+    <<: *daemon
+    ports: !reset []
+    # Read host-owned 0600 credentials without running as root.
+    user: "${PUBLIC_UID:?Set id -u}:${PUBLIC_GID:?Set id -g}"
+    environment:
+      APP_ENV: production
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:?Set HTTPS origin in .env.public}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Set real Firebase project}
+      FIREBASE_API_KEY: ${FIREBASE_API_KEY:?Set Firebase Web API key}
+      FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN:?Set Firebase auth domain}
+      FIREBASE_APP_ID: ${FIREBASE_APP_ID:?Set Firebase Web app ID}
+      FIREBASE_AUTH_EMULATOR_HOST: ""
+      FIREBASE_AUTH_EMULATOR_URL: ""
+      DEV_AUTH_TOKEN: ""
+      DEV_AUTH_STAFF_ID: ""
+      TRUSTED_PROXY_CIDRS: ${PUBLIC_PROXY_IP:-172.30.72.2}/32
+
+  db:
+    <<: *daemon
+    ports: !reset []
+  tapyrusd:
+    <<: *daemon
+    ports: !reset []
+  esplora:
+    <<: *daemon
+    ports: !reset []
+
+  cloudflared:
+    <<: *daemon
+    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+    user: "${PUBLIC_UID:?Set id -u}:${PUBLIC_GID:?Set id -g}"
+    command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/tunnel-token"]
+    volumes:
+      - type: bind
+        source: ${CLOUDFLARE_TUNNEL_TOKEN_FILE:?Set absolute path to Tunnel token file}
+        target: /run/secrets/tunnel-token
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - tunnel
+    depends_on:
+      nginx:
+        condition: service_healthy
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${PUBLIC_APP_SUBNET:-172.30.72.0/24}
+          ip_range: ${PUBLIC_APP_IP_RANGE:-172.30.72.128/25}
+  # Only the connector and Nginx share this network. Connector needs Internet egress.
+  tunnel:

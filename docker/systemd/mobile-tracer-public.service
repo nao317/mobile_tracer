@@ -1,0 +1,21 @@
+[Unit]
+Description=Mobile Tracer public stack
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Change this path if the repository is installed elsewhere.
+WorkingDirectory=/home/yellowtail/product/mobile_tracer
+ExecStartPre=/usr/bin/docker info --format {{.ServerVersion}}
+ExecStart=/bin/bash scripts/public.sh up -d --wait --wait-timeout 300
+ExecStop=/bin/bash scripts/public.sh stop
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=360
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target
