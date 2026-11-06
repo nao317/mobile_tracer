@@ -25,10 +25,10 @@ test.describe("Firebase Authentication", () => {
       await page.goto("/login");
       await page.getByLabel("メールアドレス").fill(email);
       await page.getByLabel("パスワード").fill("wrong-password");
-      await page.getByRole("button", { name: "メールアドレスでログイン" }).click();
+      await page.getByRole("button", { name: "ログイン", exact: true }).click();
       await expect(page.getByRole("alert")).toContainText("認証できませんでした");
       await page.getByLabel("パスワード").fill("test-password-123!");
-      await page.getByRole("button", { name: "メールアドレスでログイン" }).click();
+      await page.getByRole("button", { name: "ログイン", exact: true }).click();
       await expect(page).toHaveURL(/\/account$/);
       await expect(page.getByText(email, { exact: true })).toBeVisible();
       await page.reload();
@@ -47,11 +47,14 @@ test.describe("Firebase Authentication", () => {
   test("registration requires email verification and password reset changes the password", async ({ page, request }) => {
     const email = `registration-${Date.now()}@company.example`;
     await page.goto("/login");
-    await page.getByRole("button", { name: "新規登録" }).click();
+    await page.getByRole("tab", { name: "新規登録" }).click();
     await page.getByLabel("メールアドレス").fill(email);
     await page.getByLabel("パスワード").fill("test-password-123!");
     await page.getByRole("button", { name: "アカウント登録" }).click();
     await expect(page.getByRole("status")).toContainText("確認メールを送信しました");
+    await expect(page.getByRole("button", { name: "ログイン", exact: true })).toBeEnabled();
+    await expect(page.getByLabel("メールアドレス")).toHaveValue(email);
+    await expect(page.getByLabel("パスワード")).toHaveValue("");
     expect((await page.context().cookies()).some((cookie) => cookie.name === "mt_session" && cookie.value)).toBe(false);
     async function codeFor(type: string) {
       const response = await request.get(`http://${emulator}/emulator/v1/projects/demo-mobile-tracer/oobCodes`);
@@ -70,7 +73,7 @@ test.describe("Firebase Authentication", () => {
     expect(reset.ok()).toBeTruthy();
     await page.getByRole("button", { name: "ログインに戻る" }).click();
     await page.getByLabel("パスワード").fill("reset-password-456!");
-    await page.getByRole("button", { name: "メールアドレスでログイン" }).click();
+    await page.getByRole("button", { name: "ログイン", exact: true }).click();
     await expect(page).toHaveURL(/\/account$/);
     await expect(page.getByText(email, { exact: true })).toBeVisible();
   });

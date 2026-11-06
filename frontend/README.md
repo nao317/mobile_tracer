@@ -192,10 +192,21 @@ server at `http://127.0.0.1:4173`, and stops it after testing. Keep port 4173 av
 you do not need to start a server yourself. The initial E2E tests check the home page
 and the HTTP status and content of the 404 page.
 
+When neither `PLAYWRIGHT_BASE_URL` nor `API_INTERNAL_URL` is set and
+`TEST_FIREBASE_BROWSER` is not `1`, Playwright also starts a loopback-only API
+fixture on port 18781. It supplies public authentication configuration to the SSR
+loader so login UI tests run without Go or Firebase. It cannot create sessions.
+Keep port 18781 available as well. Supplying an API URL or enabling Firebase
+browser tests uses the configured backend instead of this fixture.
+
 To run against the already started Compose environment through Nginx, set
 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npm run e2e`. This skips starting a local
 server and also checks same-origin API access from the browser. CI runs this in
 the integration job and uploads a separate `nginx-playwright-results` artifact.
+If that deployment reports authentication disabled, the two interactive login UI
+tests are skipped; standalone E2E still exercises those tests with the fixture.
+Redirect and safe-error tests continue to run. Firebase authentication flows
+remain opt-in through `TEST_FIREBASE_BROWSER=1` with a running API and emulator.
 
 `npm start` runs `server.js`, which serves the production build using Express and
 the React Router adapter. `TRUSTED_PROXY_CIDRS` controls the trusted proxy address
