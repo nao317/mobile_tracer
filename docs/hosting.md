@@ -59,6 +59,8 @@ id -g
 
 `.env.public`の設定を埋めます。
 
+`.env.public`の所有者は、このチェックアウトを所有する運用ユーザーに合わせ、権限を`600`にします。`PUBLIC_ENV_FILE`で別のファイルを使う場合も同じ条件です。`scripts/public.sh`は、Composeがファイルを読む前に保存先・所有者・権限を検査します。systemdからrootで起動する場合も、所有者はチェックアウトの所有者と照合します。
+
 | 変数 | 設定内容 |
 | --- | --- |
 | `AUTH_PUBLIC_URL` | `https://mbtracer.yellowtail.work`。末尾の`/`は付けません |
@@ -111,7 +113,7 @@ Firebase Consoleでプロジェクト`mobile-tracer-2d1e3`と上記Webアプリ�
 
 ## 起動・停止・更新・ログ確認
 
-Tunnelの作成を待つ間は、Firebaseの秘密鍵を配置してから`bash scripts/public.sh build`と`bash scripts/public.sh prepare`を実行できます。`prepare`はFirebaseの秘密鍵と公開構成を検査し、Nginxと依存する内部サービスだけを起動します。cloudflaredは起動せず、ホストのポートも公開しません。
+Tunnelの作成を待つ間は、Firebaseの秘密鍵を配置してから`bash scripts/public.sh build`と`bash scripts/public.sh prepare`を実行できます。`CLOUDFLARE_TUNNEL_TOKEN_FILE`は空のままで構いません。`prepare`はFirebaseの秘密鍵と公開構成を検査し、Nginxと依存する内部サービスだけを起動します。cloudflaredは起動せず、ホストのポートも公開しません。通常の`check`・`up`では実際のトークンファイルが必要です。
 
 秘密情報を用意したら、公開構成を検査して初回起動します。開発用の`scripts/init.sh`やエミュレーター用Composeは使いません。公開プロジェクトの初期化とMigrationは`up`時に依存サービスとして実行されます。
 
@@ -143,6 +145,8 @@ systemctl status mobile-tracer-public.service
 ```
 
 現在のDocker Desktop構成では、Windowsへのログインを復帰手順に含めます。Docker Desktopの「Windowsログイン時に起動」を有効にし、WSL Integrationも有効にします。公開用systemdサービスはDocker APIが応答しない場合に15秒後に再試行します。
+
+`Type=oneshot`と`Restart=on-failure`の組み合わせは、`ExecStartPre`や`ExecStart`が失敗した場合の再試行に対応しています。oneshotで禁止されているのは`Restart=always`と`Restart=on-success`です。[systemdの仕様](https://freedesktop.org/software/systemd/man/latest/systemd.service.html)を参照してください。手動の停止は再試行の対象になりません。
 
 Windowsのタスクスケジューラに、WSLを所有するWindowsユーザーで次のタスクを作ります。`SYSTEM`にはそのユーザーのWSLが登録されていない場合があります。
 
@@ -190,7 +194,7 @@ bash scripts/public.sh up -d --wait --wait-timeout 300
 
 サービスアカウント鍵とTunnelトークンは上のバックアップに入りません。管理された秘密情報保管先へ別途保存するか、Firebase・Cloudflareで再発行します。復元時は`.env.public`のファイルパス・UID/GIDを復元先に合わせます。Firebase AuthenticationのユーザーはFirebase側に保存され、PostgreSQLのバックアップには含まれません。Firebaseプロジェクト自体の削除に備える場合は、Authenticationユーザーのエクスポート方針も別途決めてください。
 
-復元は隔離した復元先で練習し、DB、Tapyrus、環境設定を同じバックアップ時点に揃えます。次は**空の公開用ボリュームへ戻す場合だけ**の手順です。既存データがある場合は別途退避し、上書きの要否を確認します。
+復元は隔離した復元先で練習し、DB、Tapyrus、環境設定を同じバックアップ時点に揃えます。次は**空の公開用ボリュームへ戻す場合だけ**の手順です。既存データがある場合は別途退避し、上書きの要否を確認します。DBの起動は`--wait`でヘルスチェック成功まで待ち、失敗時は復元へ進みません。ヘルスチェックはTCP接続を使い、初期化中の一時的なUnixソケットサーバーを準備完了と判定しないようにしています。
 
 ```bash
 set -euo pipefail
@@ -200,7 +204,7 @@ backup_dir=/mnt/backup/mobile-tracer/RESTORE_TIMESTAMP
 # Firebase・Cloudflareの秘密ファイルも用意し、checkを通す。
 bash scripts/public.sh check
 bash scripts/public.sh stop
-bash scripts/public.sh up -d db
+bash scripts/public.sh up -d --wait --wait-timeout 120 db
 bash scripts/public.sh exec -T db sh -c 'exec pg_restore --exit-on-error --no-owner --no-acl -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$backup_dir/database.dump"
 bash scripts/public.sh run --rm --no-deps -T --user 0 --entrypoint tar tapyrusd -C /var/lib/tapyrus -xzf - < "$backup_dir/tapyrus-data.tgz"
 bash scripts/public.sh run --rm --no-deps -T --user 0 --entrypoint tar tapyrusd -C /var/lib/tapyrus-auth -xzf - < "$backup_dir/tapyrus-auth.tgz"
@@ -211,10 +215,12 @@ Esploraの索引は空の`esplora-data`から再作成します。最後の`up`�
 
 ## 公開環境での確認記録
 
-実アカウントを使わない構成検査とNginxの通信検査は、次のコマンドで実行できます。通信検査は一時コンテナを使い、ホストのポートや実Firebaseの認証情報を使いません。CIのIntegration checksでも実行します。
+実アカウントを使わない構成検査、起動時の再試行、DB復元、Nginxの通信検査は、次のコマンドで実行できます。systemdのテストは一時的なユーザーサービスを使います。DB復元と通信検査は専用の一時コンテナを使い、ホストのポートや実Firebaseの認証情報を使いません。CIのIntegration checksでも実行します。CIではsystemdテストに`sudo`と`--system`を指定してシステムマネージャー上で検査します。
 
 ```bash
 python3 scripts/test_public.py
+python3 scripts/test_public_systemd.py
+python3 scripts/test_public_restore.py
 python3 scripts/test_public_nginx.py
 ```
 

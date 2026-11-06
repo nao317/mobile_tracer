@@ -2,10 +2,8 @@
 set -euo pipefail
 public_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 public_env="${PUBLIC_ENV_FILE:-$public_root/.env.public}"
-if [[ ! -f "$public_env" ]]; then
-  echo 'Create .env.public from .env.public.example; see docs/hosting.md.' >&2
-  exit 1
-fi
+# Never let Compose read passwords before checking file ownership and permissions.
+python3 "$public_root/scripts/public-check.py" --env-file "$public_env" --env-only
 public_compose=(docker compose --project-name mobile-tracer-public
   --env-file "$public_env" -f "$public_root/compose.yaml"
   -f "$public_root/compose.firebase.yaml" -f "$public_root/compose.public.yaml")

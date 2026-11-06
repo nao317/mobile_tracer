@@ -3,7 +3,9 @@
 import argparse
 import ipaddress
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 from urllib.parse import urlsplit
@@ -11,6 +13,20 @@ from urllib.parse import urlsplit
 
 class ConfigurationError(ValueError):
     """An actionable message containing no configuration values or secret data."""
+
+
+def validate_env_file(path, *, owner_uid=None):
+    """Inspect metadata before Compose can read deployment credentials."""
+    try:
+        metadata = Path(path).stat()
+    except OSError:
+        raise ConfigurationError("Create the public environment file from .env.public.example") from None
+    if owner_uid is None:
+        # systemd runs as root, while the checkout belongs to its operator.
+        owner_uid = Path(__file__).resolve().parent.parent.stat().st_uid
+    if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != owner_uid
+            or stat.S_IMODE(metadata.st_mode) != 0o600 or not os.access(path, os.R_OK)):
+        raise ConfigurationError("Public environment file must be readable, owned by the checkout owner and mode 600")
 
 
 def validate(config, *, check_files=True, include_tunnel=True):
@@ -95,9 +111,16 @@ def validate(config, *, check_files=True, include_tunnel=True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--internal", action="store_true", help="Check internal services before the Tunnel token is available")
+    parser.add_argument("--env-file", type=Path, help="Validate the environment file before Compose reads it")
+    parser.add_argument("--env-only", action="store_true", help="Validate only the environment file metadata")
     args = parser.parse_args()
+    if args.env_only and args.env_file is None:
+        parser.error("--env-only requires --env-file")
     try:
-        validate(json.load(sys.stdin), include_tunnel=not args.internal)
+        if args.env_file is not None:
+            validate_env_file(args.env_file)
+        if not args.env_only:
+            validate(json.load(sys.stdin), include_tunnel=not args.internal)
     except ConfigurationError as error:
         print(f"Public configuration check failed: {error}", file=sys.stderr)
         sys.exit(1)
@@ -105,7 +128,10 @@ if __name__ == "__main__":
         # Neither parser errors nor paths/values from secrets go into logs.
         print("Public configuration check failed. Check .env.public, secret ownership and docs/hosting.md.", file=sys.stderr)
         sys.exit(1)
-    if args.internal:
+    if args.env_only:
+        # Preserve Compose's JSON/quiet output for callers of public.sh.
+        sys.exit(0)
+    elif args.internal:
         print("Internal configuration OK: HTTPS, real Firebase, private ports and Firebase credentials. Tunnel not checked.")
     else:
         print("Public configuration OK: HTTPS, real Firebase, private ports and protected secret files.")

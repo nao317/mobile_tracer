@@ -66,7 +66,7 @@ docker compose stop
 | `secrets/firebase-admin.json` | バックエンド用のFirebase Admin秘密鍵 |
 | `secrets/tunnel-token` | Cloudflare Tunnelのトークン文字列 |
 
-`.env.public`のひな形は[.env.public.example](.env.public.example)です。上の3ファイルはGit管理対象外にし、秘密鍵とトークンの権限は`600`にします。
+`.env.public`のひな形は[.env.public.example](.env.public.example)です。上の3ファイルはGit管理対象外にし、権限を`600`にします。`.env.public`はチェックアウトを所有する運用ユーザーの所有にしてください。起動スクリプトはComposeを呼ぶ前に、このファイルの所有者と権限を確認します。
 
 公開用の設定を検査し、アプリとTunnelを起動します。停止後の再開やコード更新時も同じ`up`を使います。
 

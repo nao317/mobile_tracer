@@ -10,7 +10,9 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
-validate = runpy.run_path(str(ROOT / "scripts/public-check.py"))["validate"]
+checker = runpy.run_path(str(ROOT / "scripts/public-check.py"))
+validate = checker["validate"]
+validate_env_file = checker["validate_env_file"]
 
 
 class PublicConfigTest(unittest.TestCase):
@@ -18,7 +20,7 @@ class PublicConfigTest(unittest.TestCase):
     def setUpClass(cls):
         # A real Compose merge, with only non-secret test values. No daemon needed.
         env = {key: value for key, value in os.environ.items()
-               if not key.startswith(("FIREBASE_", "AUTH_", "COMPOSE_", "DEV_AUTH_", "PUBLIC_"))}
+               if not key.startswith(("FIREBASE_", "AUTH_", "COMPOSE_", "DEV_AUTH_", "PUBLIC_", "POSTGRES_", "TAPYRUS_"))}
         with tempfile.TemporaryDirectory() as temp:
             envfile = Path(temp) / "test.env"
             envfile.write_text((ROOT / ".env.public.example").read_text().replace(
@@ -156,6 +158,144 @@ class PublicConfigTest(unittest.TestCase):
         finally:
             if created:
                 secret_dir.rmdir()
+
+
+class PublicWrapperTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.folder = Path(self.temp.name)
+        self.envfile = self.folder / "public.env"
+        self.token = self.folder / "token"
+        self.token.write_text("test-token")
+        self.token.chmod(0o600)
+        self.admin = self.folder / "admin.json"
+        self.admin.write_text(json.dumps({"type": "service_account", "project_id": "mobile-tracer-2d1e3",
+                                         "private_key": "test-key", "client_email": "test@example.com"}))
+        self.admin.chmod(0o600)
+        self.env = {key: value for key, value in os.environ.items()
+                    if not key.startswith(("PUBLIC_", "FIREBASE_", "AUTH_", "DEV_AUTH_", "COMPOSE_", "POSTGRES_", "TAPYRUS_"))}
+        values = {"FIREBASE_API_KEY": "test-web-key", "POSTGRES_PASSWORD": "private-test-marker",
+                  "TAPYRUS_RPC_PASSWORD": "test-rpc-password", "PUBLIC_UID": str(os.getuid()),
+                  "PUBLIC_GID": str(os.getgid()), "FIREBASE_CREDENTIALS_FILE": str(self.admin),
+                  "CLOUDFLARE_TUNNEL_TOKEN_FILE": str(self.token)}
+        self.envtext = "\n".join(
+            line.split("=", 1)[0] + "=" + values[line.split("=", 1)[0]]
+            if line.split("=", 1)[0] in values else line
+            for line in (ROOT / ".env.public.example").read_text().splitlines()) + "\n"
+        self.envfile.write_text(self.envtext)
+        self.envfile.chmod(0o600)
+        self.compose = ["docker", "compose", "--project-name", "mobile-tracer-public", "--env-file", str(self.envfile)]
+        for name in ("compose.yaml", "compose.firebase.yaml", "compose.public.yaml"):
+            self.compose += ["-f", str(ROOT / name)]
+        self.configfile = self.folder / "resolved.json"
+        self.resolve_config()
+        self.calls = self.folder / "calls.jsonl"
+        fakebin = self.folder / "bin"
+        fakebin.mkdir()
+        docker = fakebin / "docker"
+        docker.write_text("""#!/usr/bin/env python3
+import json, os, pathlib, sys
+args = sys.argv[1:]
+with open(os.environ['TEST_COMPOSE_CALLS'], 'a') as out:
+    out.write(json.dumps(args) + '\\n')
+if 'config' in args:
+    print(pathlib.Path(os.environ['TEST_COMPOSE_CONFIG']).read_text())
+elif 'up' in args and args[-1] == 'db' and '--wait' in args and os.environ.get('TEST_DB_NOT_READY') == '1':
+    sys.exit(70)
+""")
+        docker.chmod(0o700)
+        self.fake_env = {**self.env, "PATH": str(fakebin) + os.pathsep + self.env["PATH"],
+                         "PUBLIC_ENV_FILE": str(self.envfile), "TEST_COMPOSE_CONFIG": str(self.configfile),
+                         "TEST_COMPOSE_CALLS": str(self.calls)}
+
+    def resolve_config(self):
+        output = subprocess.check_output(self.compose + ["config", "--format", "json"], env=self.env)
+        self.configfile.write_bytes(output)
+        return json.loads(output)
+
+    def run_wrapper(self, *args):
+        return subprocess.run(["bash", str(ROOT / "scripts/public.sh"), *args],
+                              env=self.fake_env, text=True, capture_output=True, cwd=self.folder)
+
+    def commands(self):
+        return [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []
+
+    def test_env_metadata(self):
+        validate_env_file(self.envfile)
+        for mode in (0o644, 0o640, 0o660, 0o666):
+            with self.subTest(mode=oct(mode)):
+                self.envfile.chmod(mode)
+                with self.assertRaises(ValueError):
+                    validate_env_file(self.envfile)
+        self.envfile.chmod(0o600)
+        with self.assertRaises(ValueError):
+            validate_env_file(self.envfile, owner_uid=os.getuid() + 1)
+        with self.assertRaises(ValueError):
+            validate_env_file(self.folder / "absent.env")
+        with self.assertRaises(ValueError):
+            validate_env_file(self.folder)
+
+    def test_unsafe_env_never_reaches_compose(self):
+        self.envfile.chmod(0o644)
+        for args in (("check",), ("up", "-d"), ("build",), ("prepare",), ("config", "--quiet")):
+            with self.subTest(args=args):
+                result = self.run_wrapper(*args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("mode 600", result.stderr)
+                self.assertNotIn("private-test-marker", result.stdout + result.stderr)
+                self.assertEqual(self.commands(), [])
+
+    def test_secure_env_preserves_compose_machine_output(self):
+        result = self.run_wrapper("config", "--format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), json.loads(self.configfile.read_text()))
+
+    def test_blank_token_allows_preparation_but_blocks_public_start(self):
+        self.envfile.write_text(self.envtext.replace(str(self.token), ""))
+        config = self.resolve_config()  # Real Compose must interpolate successfully with an empty token path.
+        validate(config, include_tunnel=False)
+        for args in (("config", "--quiet"), ("build",), ("prepare",)):
+            with self.subTest(args=args):
+                result = self.run_wrapper(*args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+        up = [args for args in self.commands() if "up" in args]
+        self.assertEqual(len(up), 1)
+        self.assertEqual(up[0][-1], "nginx")  # prepare must never launch the Tunnel.
+        self.calls.unlink()
+        for args in (("check",), ("up", "-d")):
+            with self.subTest(args=args):
+                result = self.run_wrapper(*args)
+                self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any("up" in args for args in self.commands()))
+
+    def test_documented_restore_stops_if_database_readiness_fails(self):
+        import hashlib
+        import re
+        blocks = re.findall(r"```bash\n(.*?)\n```", (ROOT / "docs/hosting.md").read_text(), re.S)
+        restore = next(block for block in blocks if "RESTORE_TIMESTAMP" in block)
+        restore = restore.replace("backup_dir=/mnt/backup/mobile-tracer/RESTORE_TIMESTAMP",
+                                  'backup_dir="$TEST_BACKUP_DIR"')
+        backup = self.folder / "backup"
+        backup.mkdir()
+        names = ("database.dump", "tapyrus-data.tgz", "tapyrus-auth.tgz")
+        for name in names:
+            (backup / name).write_bytes(b"test-fixture")
+        (backup / "SHA256SUMS").write_text("".join(
+            hashlib.sha256((backup / name).read_bytes()).hexdigest() + "  " + name + "\n" for name in names))
+        for unavailable in (True, False):
+            with self.subTest(database_unavailable=unavailable):
+                self.calls.unlink(missing_ok=True)
+                env = {**self.fake_env, "TEST_BACKUP_DIR": str(backup), "TEST_DB_NOT_READY": "1" if unavailable else "0"}
+                result = subprocess.run(["bash"], input=restore, text=True, env=env, cwd=ROOT, capture_output=True)
+                commands = self.commands()
+                restores = [args for args in commands if "exec" in args and any("pg_restore" in a for a in args)]
+                if unavailable:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(restores, [])
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(len(restores), 1)
 
 
 if __name__ == "__main__":
