@@ -4,4 +4,9 @@ services:
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-admin.json
     volumes:
-      - ${FIREBASE_CREDENTIALS_FILE:?Set path to untracked Firebase Admin service account JSON}:/run/secrets/firebase-admin.json:ro
+      - type: bind
+        source: ${FIREBASE_CREDENTIALS_FILE:?Set path to untracked Firebase Admin service account JSON}
+        target: /run/secrets/firebase-admin.json
+        read_only: true
+        bind:
+          create_host_path: false

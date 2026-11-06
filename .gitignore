@@ -10,6 +10,12 @@ __pycache__/
 /docs/.slides.lock
 /docs/.slides-*.tmp
 /.env
+/.env.public
+/backups/
+/secrets/
+**/*firebase-admin*.json
+**/*service-account*.json
+**/tunnel-token*
 
 # Firebase emulator logs and local state; service account credentials stay outside the repository.
 /firebase-debug.log
