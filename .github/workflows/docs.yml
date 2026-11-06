@@ -15,7 +15,7 @@ jobs:
   docs:
     name: Requirements and retained PDFs
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -25,8 +25,10 @@ jobs:
           cache-dependency-path: scripts/docs/requirements.txt
       - name: Install system libraries and Japanese font
         run: |
-          sudo apt-get update
-          sudo apt-get install -y fontconfig fonts-noto-cjk libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0
+          # Retry stalled mirror downloads instead of consuming the entire job timeout.
+          apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends fontconfig fonts-noto-cjk libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0
       - name: Install documentation dependencies
         run: |
           python -m venv .venv-docs
