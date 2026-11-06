@@ -2,25 +2,102 @@
 
 ## システムを起動する
 
-初回はリポジトリルートで次を実行します。Nginx、React RouterのSSRサーバー、Go API、PostgreSQL、Tapyrus Core・Esploraが起動します。
+このラップトップのDocker Desktopを起動し、WSL2のターミナルからリポジトリルートで実行します。Nginx、React RouterのSSRサーバー、Go API、PostgreSQL、Tapyrus Core・EsploraをDockerで動かします。
+
+| 用途 | アクセス先 | 環境変数ファイル | 認証 |
+| --- | --- | --- | --- |
+| ローカル開発 | `http://localhost:8080/login` | `.env` | Firebase Authエミュレーター |
+| Cloudflare Tunnelで公開 | `https://mbtracer.yellowtail.work/login` | `.env.public` | 実Firebaseプロジェクト |
+
+開発用と公開用は別のComposeプロジェクトとデータボリュームを使います。ローカルだけで作業するときは、公開用が起動中なら先に`bash scripts/public.sh stop`で停止してください。
+
+### 開発用サーバーをローカルだけで起動する
+
+初回は`.env`とTapyrusの開発用データを準備します。`scripts/init.sh`は未設定のDB・RPCパスワードを生成します。
 
 ```bash
 bash scripts/init.sh
-docker compose up --build --wait --wait-timeout 180
+```
+
+ログイン機能もローカルで確認できるように、Firebase Authエミュレーターを含めて起動します。2回目以降も同じコマンドで起動・再開できます。
+
+```bash
+docker compose -f compose.yaml -f compose.firebase-emulator.yaml up --build -d --wait --wait-timeout 180
+```
+
+ログイン画面は`http://localhost:8080/login`です。この構成ではCloudflare Tunnelを起動せず、Nginxは`127.0.0.1:8080`、認証エミュレーターは`127.0.0.1:9099`で待ち受けます。実Firebaseの秘密鍵は不要で、実メールの送信や実Googleアカウントへのログインは行いません。確認メール・再設定メールのリンクはエミュレーターのログに出ます。
+
+稼働状態とログの確認、停止には、起動時と同じComposeファイルの組み合わせを使います。
+
+```bash
+# 稼働状態
+docker compose -f compose.yaml -f compose.firebase-emulator.yaml ps
+
+# アプリ・認証エミュレーターのログ（Ctrl+Cでログ表示を終了）
+docker compose -f compose.yaml -f compose.firebase-emulator.yaml logs -f --tail=100 frontend backend firebase-auth
+
+# 停止（データは保持）
+docker compose -f compose.yaml -f compose.firebase-emulator.yaml stop
+```
+
+`.env`のFirebase関連設定が空の場合は、次の通常構成で認証を無効にした接続確認もできます。ログインを確認する場合は上のエミュレーター構成を使ってください。
+
+```bash
+docker compose up --build -d --wait --wait-timeout 180
 python3 scripts/smoke.py
 python3 scripts/nginx-smoke.py
+# 停止
+docker compose stop
 ```
 
 画面は `http://localhost:8080/`、APIは `http://localhost:8080/api/health` など、同じオリジンで利用できます。Nginxが `/api` と `/api/` 配下をGo APIへ、それ以外をReact Routerへ転送します。パス・クエリ文字列・HTTPステータスは維持します。公開ポートはNginxの `127.0.0.1:8080` のみです。変更する場合は `.env` の `NGINX_PORT` を指定してください。
 
 `/nginx-health` はNginx自身の稼働、`/api/health` はGo APIの稼働、`/api/ready` はDB・Tapyrusを含む準備状態を確認します。NginxはフロントとAPIのヘルスチェック成功後に起動します。
 
-### 開発時に直接接続する
+### 公開用サーバーを起動する
+
+このラップトップのWSL2から利用するDocker上でアプリとcloudflaredを動かし、Cloudflare Tunnelを経由して`https://mbtracer.yellowtail.work`へ公開します。
+
+初回は[公開・運用手順](docs/hosting.md)に従い、CloudflareのRouteとFirebase Authenticationを設定し、次のファイルを用意します。
+
+| ファイル | 内容 |
+| --- | --- |
+| `.env.public` | 公開URL、Firebase Web設定、DB・RPCパスワード、秘密情報ファイルの参照先 |
+| `secrets/firebase-admin.json` | バックエンド用のFirebase Admin秘密鍵 |
+| `secrets/tunnel-token` | Cloudflare Tunnelのトークン文字列 |
+
+`.env.public`のひな形は[.env.public.example](.env.public.example)です。上の3ファイルはGit管理対象外にし、権限を`600`にします。`.env.public`はチェックアウトを所有する運用ユーザーの所有にしてください。起動スクリプトはComposeを呼ぶ前に、このファイルの所有者と権限を確認します。
+
+公開用の設定を検査し、アプリとTunnelを起動します。停止後の再開やコード更新時も同じ`up`を使います。
+
+```bash
+bash scripts/public.sh check
+bash scripts/public.sh up --build -d --wait --wait-timeout 300
+```
+
+起動後は`https://mbtracer.yellowtail.work/login`を開きます。公開構成にはホストの公開ポートがなく、外部からの接続はTunnelを通してNginxへ転送します。DB・Tapyrusなどには直接接続できません。
+
+```bash
+# 稼働状態
+bash scripts/public.sh ps
+
+# ログ（Ctrl+Cでログ表示を終了）
+bash scripts/public.sh logs -f --tail=100 nginx frontend backend cloudflared
+
+# 公開用のアプリとTunnelを停止（データは保持）
+bash scripts/public.sh stop
+```
+
+公開用のプロジェクト名は`mobile-tracer-public`です。公開用の操作には`bash scripts/public.sh`を使い、設定ファイル・環境変数・プロジェクト名をそろえます。`down -v`はDB・ウォレットなどのデータを削除するため、通常の停止には使いません。
+
+Windows再起動後の復帰、更新前のバックアップ、復元の手順は[公開・運用手順](docs/hosting.md)を参照してください。
+
+### 開発時にAPI・フロント・DBへ直接接続する
 
 通常のCompose設定では、API・フロント・DBは内部ネットワークから接続します。ホストから直接接続する場合は開発用の設定を重ねます。
 
 ```bash
-docker compose -f compose.yaml -f compose.debug.yaml up --build --wait --wait-timeout 180
+docker compose -f compose.yaml -f compose.firebase-emulator.yaml -f compose.debug.yaml up --build -d --wait --wait-timeout 180
 ```
 
 | 接続先 | URL・ポート | 変更する変数 |
@@ -30,11 +107,9 @@ docker compose -f compose.yaml -f compose.debug.yaml up --build --wait --wait-ti
 | フロントへの直接接続 | `http://localhost:3000` | `FRONTEND_DEBUG_PORT` |
 | PostgreSQL | `127.0.0.1:5432` | `DB_PORT` |
 
-開発用の公開を解除するには、通常の `docker compose up -d --wait --wait-timeout 180` でサービスを更新します。停止・削除も、起動に使ったComposeファイルの組み合わせで実行してください。旧設定の `BACKEND_PORT` は使用しません。
+API・フロント・DBへの直接接続を解除するには、`compose.debug.yaml`を外して`docker compose -f compose.yaml -f compose.firebase-emulator.yaml up -d --wait --wait-timeout 180`でサービスを更新します。停止・削除も、起動に使ったComposeファイルの組み合わせで実行してください。旧設定の`BACKEND_PORT`は使用しません。
 
 NginxはHost（ポートを含む）、接続元IP、通信方式を転送します。クライアントが送った転送ヘッダーはNginxで上書きします。Go・SSRサーバーの `TRUSTED_PROXY_CIDRS` には、このローカルComposeで使うプライベートIPv4範囲を設定しています。Compose外で直接起動する場合の既定値は空で、転送ヘッダーを信頼しません。本番で使う場合は、実際のプロキシのアドレス範囲に合わせて指定します。
-
-今回の構成はローカルHTTP用です。HTTPSと複数台への負荷分散は今後追加します。
 
 Goを使ったローカル起動、環境変数、テストの実行方法は[バックエンドのREADME](backend/README.md)を参照してください。
 

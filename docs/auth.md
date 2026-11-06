@@ -32,6 +32,8 @@ docker compose -f compose.yaml -f compose.firebase.yaml up --build -d --wait
 
 HTTPを使えるのは`APP_ENV=development`または`test`のループバックURLだけです。本番はHTTPSを使用します。以前の`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`GOOGLE_CALLBACK_URL`・`AUTH_JWT_*`・`AUTH_ACCESS_TTL`は使用しません。Googleへの直接コールバックの代わりに、FirebaseがOAuthを処理します。
 
+WSL2からCloudflare Tunnelで公開する場合は、[公開・運用手順](hosting.md)に従って`bash scripts/public.sh`を使います。公開構成ではホストのポート開放を解除し、実FirebaseとHTTPSを必須にします。
+
 ## Firebaseをクラウドに作らずローカルで確認する
 
 ```bash

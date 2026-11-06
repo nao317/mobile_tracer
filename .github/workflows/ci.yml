@@ -231,6 +231,13 @@ jobs:
       - name: Validate Compose
         run: docker compose config --quiet
 
+      - name: Check public deployment policy and HTTPS forwarding
+        run: |
+          python3 scripts/test_public.py
+          sudo python3 scripts/test_public_systemd.py --system
+          python3 scripts/test_public_restore.py
+          python3 scripts/test_public_nginx.py
+
       # 起動完了を最大180秒待つ。サービスの準備状態はComposeのhealthcheckで定義する。
       - name: Build and start services
         run: docker compose up --build --wait --wait-timeout 180
