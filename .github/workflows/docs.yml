@@ -16,6 +16,8 @@ jobs:
     name: Requirements and retained PDFs
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      DOCS_FONT_PATH: ${{ github.workspace }}/.cache-docs/fonts/NotoSansCJK-Regular.ttc
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -23,12 +25,24 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: scripts/docs/requirements.txt
-      - name: Install system libraries and Japanese font
+      - name: Install system libraries
         run: |
-          # Retry stalled mirror downloads instead of consuming the entire job timeout.
-          apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_options[@]}" update
-          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends fontconfig fonts-noto-cjk libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0
+          # A slow Azure mirror can keep sending data without hitting apt's idle timeout.
+          # Keep the runner's signed Ubuntu archive/security fallbacks instead.
+          # https://github.com/actions/runner-images/issues/14823
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
+          apt_options=(-o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          timeout --kill-after=15s 5m sudo apt-get "${apt_options[@]}" update
+          timeout --kill-after=15s 5m sudo apt-get "${apt_options[@]}" install -y --no-install-recommends fontconfig libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0
+      - name: Cache Japanese font
+        uses: actions/cache@v5
+        with:
+          path: .cache-docs/fonts/NotoSansCJK-Regular.ttc
+          key: ${{ runner.os }}-docs-font-${{ hashFiles('scripts/docs/install_font.py') }}
+      - name: Prepare Japanese font
+        run: timeout --kill-after=15s 5m python scripts/docs/install_font.py "$DOCS_FONT_PATH"
       - name: Install documentation dependencies
         run: |
           python -m venv .venv-docs

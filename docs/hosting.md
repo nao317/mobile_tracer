@@ -133,6 +133,20 @@ bash scripts/public.sh logs --tail=100 nginx backend cloudflared
 
 更新前にバックアップを取得します。変更を確認してコードを取得し、`bash scripts/public.sh pull`と`bash scripts/public.sh up --build -d --wait --wait-timeout 300`を実行します。失敗時は`ps`と`logs --tail=100`で対象を特定します。Migration適用後に旧コードへ戻す場合はDBの互換性も確認します。
 
+### Docker Desktopのマウントエラーから復旧する
+
+WSL2・Docker Desktopを起動し直した後、既存コンテナの起動時に`docker-desktop-bind-mounts`や`/etc/nginx/mobile-tracer`へのマウントが`no such file or directory`で失敗することがあります。まず`ls -ld docker/nginx/includes`でホスト側の設定ディレクトリが存在することを確認します。
+
+設定ディレクトリが存在し、API・DBなどが正常に起動している場合は、Nginxとcloudflaredを順に再作成します。古いコンテナのマウント状態を更新する操作で、イメージの再ビルドやDB・Tapyrusの再作成は不要です。
+
+```bash
+bash scripts/public.sh up -d --no-deps --force-recreate --wait --wait-timeout 60 nginx
+bash scripts/public.sh up -d --no-deps --force-recreate --wait --wait-timeout 60 cloudflared
+bash scripts/public.sh exec -T nginx nginx -t
+```
+
+2026-11-07にこの手順でNginxのマウントエラーを解消し、Nginxのヘルスチェックと設定検査が成功することを確認しました。公開URLの`/login`・`/api/health`・`/api/ready`もCloudflare経由でHTTPS 200を返しています。復旧のために`down -v`を実行する必要はありません。
+
 ## Windows再起動後に公開状態へ戻す
 
 WSLが起動した後のCompose起動をsystemdで管理します。以下のサービスファイルの`WorkingDirectory`が実際の配置先に合っているか確認し、初回のビルドと起動確認を済ませてから導入します。

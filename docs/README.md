@@ -53,6 +53,8 @@ Pythonの直接依存はWeasyPrint 70.0、markdown-it-py 4.0.0、PyMuPDF 1.26.7�
 
 フォントは、`DOCS_FONT_PATH` で指定したファイル、仮想環境内の上記フォント、Fontconfigで見つかったNoto Sans CJK JPの順に選びます。任意のフォントへの自動置換はせず、必要な日本語がない場合はエラーにします。ローカルの不足ライブラリがあるときは `docs.sh` がそのディレクトリを設定します。
 
+文書CIでは、大きな`fonts-noto-cjk`パッケージの毎回の取得を避け、使用する`NotoSansCJK-Regular.ttc`だけをNotoの固定コミットから取得します。`scripts/docs/install_font.py`で従来のフォントのSHA256と照合し、`.cache-docs/fonts/`にキャッシュします。キャッシュから復元した場合も毎回検証し、`DOCS_FONT_PATH`で要件定義書とスライドの両方に同じフォントを指定します。
+
 ## 編集から手動共有まで
 
 すべてリポジトリルートで実行します。
