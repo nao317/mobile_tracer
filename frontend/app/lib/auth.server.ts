@@ -4,7 +4,7 @@ import { z } from "zod";
 // PostgreSQL and the existing API also accept UUIDs without a version/variant restriction.
 const uuidSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 const sessionSchema = z.object({
-  user: z.object({ id: uuidSchema, email: z.string(), email_verified: z.boolean() }),
+  user: z.object({ id: uuidSchema, email: z.string(), email_verified: z.boolean(), account_type: z.enum(["general", "business"]).optional(), display_name: z.string().optional() }),
   memberships: z.array(z.object({ tenant_id: uuidSchema, tenant_name: z.string(), staff_id: uuidSchema, display_name: z.string() })),
   selected_staff_id: uuidSchema.nullable(),
   system_admin: z.boolean(),

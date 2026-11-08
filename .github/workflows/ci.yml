@@ -247,6 +247,7 @@ jobs:
 
       - name: Check Nginx configuration and routing
         run: |
+          python3 scripts/test_nginx_smoke.py
           docker compose exec -T nginx nginx -t
           python3 scripts/nginx-smoke.py
 

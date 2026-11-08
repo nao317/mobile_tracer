@@ -1,8 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const externalURL = process.env.PLAYWRIGHT_BASE_URL;
-const useAuthFixture = !externalURL && !process.env.API_INTERNAL_URL && process.env.TEST_FIREBASE_BROWSER !== "1";
-const authFixtureURL = "http://127.0.0.1:18781";
+const useAuthFixture =
+  !externalURL &&
+  !process.env.API_INTERNAL_URL &&
+  process.env.TEST_FIREBASE_BROWSER !== "1";
+const authFixtureURL = `http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT || "18781"}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -22,20 +25,31 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: externalURL ? undefined : [
-    ...(useAuthFixture ? [{
-      command: "node e2e/fixtures/auth-api.mjs",
-      url: `${authFixtureURL}/health`,
-    }] : []),
-    {
-      command: "npm run build && npm run start",
-      url: "http://127.0.0.1:4173",
-      env: {
-        HOST: "127.0.0.1", PORT: "4173",
-        ...(useAuthFixture ? { API_INTERNAL_URL: authFixtureURL } : {}),
-      },
-      stdout: "pipe",
-      timeout: 120_000,
-    },
-  ],
+  webServer: externalURL
+    ? undefined
+    : [
+        ...(useAuthFixture
+          ? [
+              {
+                command: "node e2e/fixtures/auth-api.mjs",
+                url: `${authFixtureURL}/health`,
+                reuseExistingServer: !process.env.CI,
+              },
+            ]
+          : []),
+        {
+          command: "npm run build && npm run start",
+          url: "http://127.0.0.1:4173",
+          reuseExistingServer: !process.env.CI,
+          env: {
+            HOST: "127.0.0.1",
+            PORT: "4173",
+            APP_ENV: "development",
+            ENABLE_UI_PREVIEW: "1",
+            ...(useAuthFixture ? { API_INTERNAL_URL: authFixtureURL } : {}),
+          },
+          stdout: "ignore",
+          timeout: 120_000,
+        },
+      ],
 });

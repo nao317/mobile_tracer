@@ -1,18 +1,14 @@
-# Welcome to React Router!
+# Mobile Tracer フロントエンド
 
-A modern, production-ready template for building full-stack React applications using React Router.
+業務画面は`/app`、開発用の全画面プレビューは`/preview/screens`です。共通UI・画面一覧・API接続の範囲・未接続機能は[フロントエンド画面の状況](../docs/frontend-ui.md)を参照してください。
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+```bash
+APP_ENV=development ENABLE_UI_PREVIEW=1 npm run dev
+```
 
-## Features
+プレビューは架空データのみを使い、Go APIなしで確認できます。通常は無効で、公開構成でも有効化しません。実データを扱う業務画面には認証と所属の紐付けが必要です。
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+React RouterのFramework Mode、React、TypeScript、Tailwind CSSを使用しています。
 
 ## Getting Started
 
@@ -185,17 +181,20 @@ npx playwright install --with-deps chromium
 Put unit tests beside application code as `app/**/*.test.ts(x)` or `app/**/*.spec.ts(x)`.
 Vitest uses jsdom, Testing Library, and jest-dom matchers. Its separate configuration
 keeps the React Router build plugin out of unit tests and excludes E2E tests.
-The initial unit tests cover the welcome content, resource links, and error messages.
+Unit tests cover authentication, validation, draft/version invariants, and server-side API boundaries.
 
 Put E2E tests in `e2e/*.spec.ts`. Playwright builds the application, starts the production
 server at `http://127.0.0.1:4173`, and stops it after testing. Keep port 4173 available;
-you do not need to start a server yourself. The initial E2E tests check the home page
-and the HTTP status and content of the 404 page.
+you do not need to start a server yourself. E2E tests cover authentication UI, the home and
+404 pages, every preview screen at phone width, the three business flows, and the live
+workspace's HTTP path using a loopback-only API fixture.
 
 When neither `PLAYWRIGHT_BASE_URL` nor `API_INTERNAL_URL` is set and
 `TEST_FIREBASE_BROWSER` is not `1`, Playwright also starts a loopback-only API
 fixture on port 18781. It supplies public authentication configuration to the SSR
-loader so login UI tests run without Go or Firebase. It cannot create sessions.
+loader so login UI tests run without Go or Firebase. It cannot create Firebase sessions.
+An explicit test cookie exercises the workspace HTTP contract against in-memory fixture data;
+the real Go API does not accept that cookie. This fixture is never used by application deployments.
 Keep port 18781 available as well. Supplying an API URL or enabling Firebase
 browser tests uses the configured backend instead of this fixture.
 
@@ -267,8 +266,4 @@ Make sure to deploy the output of `npm run build`
 
 ## Styling
 
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+共通UIのトークンとスタイルは`app/components/ui/ui.css`、業務画面のレイアウトは`app/features/workspace/workspace.css`にあります。既存ログイン画面のスタイルと、言語・テーマの切替は維持しています。

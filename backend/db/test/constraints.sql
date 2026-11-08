@@ -1221,3 +1221,21 @@ SELECT pg_temp.ng('セッションのCookieハッシュを差し替える', $q$
 SELECT pg_temp.ng('ログインチャレンジを再利用可能に戻す', $q$
   UPDATE auth.login_challenges SET used_at=NULL WHERE challenge_hash=repeat('e',64) $q$,
   'P0001',expected_message => 'auth.login_challenges のこの行は変更・削除できません');
+
+-- アカウント区分と申請履歴。審査済みの申請を再編集しない。
+SELECT pg_temp.ng('未知のユーザー区分を設定できない', $q$
+ UPDATE auth.users SET account_type='administrator' WHERE id=pg_temp.u('fa01') $q$, '23514','users_account_type_check');
+SELECT pg_temp.ok('一般ユーザーの変更申請を保存する', $q$
+ INSERT INTO auth.management_requests(id,requester_id,request_key,kind,payload) VALUES(pg_temp.u('fb01'),pg_temp.u('fa01'),pg_temp.u('fb02'),'business_upgrade','{"display_name":"申請者","reason":"企業利用"}') $q$);
+SELECT pg_temp.ng('申請内容を後から差し替えられない', $q$
+ UPDATE auth.management_requests SET payload='{}' WHERE id=pg_temp.u('fb01') $q$, 'P0001',expected_message=>'auth.management_requests の payload は変更できません');
+SELECT pg_temp.ng('同種の承認待ち申請を重複作成できない', $q$
+ INSERT INTO auth.management_requests(requester_id,request_key,kind,payload) VALUES(pg_temp.u('fa01'),pg_temp.u('fb03'),'business_upgrade','{}') $q$, '23505','management_requests_one_pending');
+SELECT pg_temp.ng('理由のない審査結果を保存できない', $q$
+ UPDATE auth.management_requests SET status='approved',decided_by=pg_temp.u('fa01'),decided_at=now() WHERE id=pg_temp.u('fb01') $q$, '23514','management_requests_check1');
+SELECT pg_temp.ok('審査者・日時・理由を保持して承認する', $q$
+ UPDATE auth.management_requests SET status='approved',decided_by=pg_temp.u('fa01'),decided_at=now(),decision_reason='確認済み' WHERE id=pg_temp.u('fb01') $q$);
+SELECT pg_temp.ng('審査結果を承認待ちへ戻せない', $q$
+ UPDATE auth.management_requests SET status='pending',decided_by=NULL,decided_at=NULL,decision_reason='' WHERE id=pg_temp.u('fb01') $q$, 'P0001',expected_message=>'auth.management_requests のこの行は変更・削除できません');
+SELECT pg_temp.ng('申請履歴を削除できない', $q$
+ DELETE FROM auth.management_requests WHERE id=pg_temp.u('fb01') $q$, 'P0001',expected_message=>'auth.management_requests のこの行は変更・削除できません');

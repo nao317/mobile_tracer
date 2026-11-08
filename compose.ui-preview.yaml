@@ -1,0 +1,6 @@
+# Local UI review only. Fictional data does not change API authentication.
+services:
+  frontend:
+    environment:
+      APP_ENV: development
+      ENABLE_UI_PREVIEW: "1"
