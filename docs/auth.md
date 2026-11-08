@@ -74,7 +74,7 @@ docker compose exec backend /app/auth-link --firebase-uid 'FIREBASE_UID' --staff
 
 `FIREBASE_PROJECT_ID`とUIDの組み合わせが本人識別子です。同じFirebaseユーザーへプロバイダーが連携されていれば、メール・パスワードとGoogleで同じ業務上の紐付けを使えます。プロバイダーの自動連携方針はFirebaseの設定に従います。別UID間の業務権限をメールから自動統合しません。
 
-システム管理者はFirebaseが確認済みとしたメールと`SYSTEM_ADMIN_EMAILS`をサーバーで照合します。画面遷移だけでなく`/api/admin/context`でも確認します。管理者指定だけでは顧客・店舗・担当案件の業務権限は付与しません。
+システム管理者はFirebaseが確認済みとしたメールと`SYSTEM_ADMIN_EMAILS`をサーバーで照合します。画面遷移だけでなく、ユーザー・企業・申請を管理する`/api/admin/*`でも確認します。管理者指定だけでは顧客・店舗・担当案件の業務権限は付与しません。
 
 ## セッションと認証API
 
@@ -125,3 +125,7 @@ Goの認証結合テストと業務APIの結合テストは`TEST_DATABASE=1 go t
 クラウドでのGoogleログイン、実メールの配送、承認済みドメインは実Firebaseプロジェクトの設定後に確認してください。
 
 Firebase公式資料: [メール・パスワード](https://firebase.google.com/docs/auth/web/password-auth)、[Googleログイン](https://firebase.google.com/docs/auth/web/google-signin)、[セッションCookie](https://firebase.google.com/docs/auth/admin/manage-cookies)、[Auth Emulator](https://firebase.google.com/docs/emulator-suite/connect_auth)。
+
+## ユーザー区分・企業・申請
+
+`000005_user_company_requests.up.sql`で一般・業者区分と企業プロファイル、審査履歴を追加します。一般ユーザーから業者ユーザーへの変更は申請し、システム管理者の承認後に反映します。業者ユーザーは企業とプロファイルの作成、所属企業のプロファイル変更を申請できます。管理者は全申請を一元管理し、承認・拒否できます。画面・API・移行の詳細は[ユーザー・企業・申請の管理](user-company-management.md)を参照してください。

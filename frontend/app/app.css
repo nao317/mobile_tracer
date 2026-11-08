@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./components/ui/ui.css";
+@import "./features/workspace/workspace.css";
 
 @theme {
   --font-sans: "Google Sans", "M PLUS Rounded 1c", ui-sans-serif, system-ui, sans-serif,
@@ -9,13 +11,17 @@ html,
 body {
   @apply bg-white dark:bg-gray-950;
 
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
   }
 }
 
 .login-page {
-  --login-font: "Google Sans", "M PLUS Rounded 1c", sans-serif;
+  --login-font: var(--font-sans);
   --login-background: #fff;
   --login-foreground: #111827;
   --login-muted: #4b5563;
@@ -25,7 +31,9 @@ body {
   --login-accent: #4f5fcb;
   --login-selected-background: #eef0ff;
   --login-selected-text: #3e4caf;
-  --login-field-background: linear-gradient(180deg, #cdd0f9 0%, #f0f0f0 100%);
+  --login-tab-active-background: #4f5fcb;
+  --login-tab-active-text: #fff;
+  --login-tab-hover-background: #e5e7eb;
   position: relative;
   min-height: 100vh;
   min-height: 100svh;
@@ -47,7 +55,9 @@ body {
   --login-accent: #b0baff;
   --login-selected-background: #303954;
   --login-selected-text: #d3d9ff;
-  --login-field-background: linear-gradient(180deg, #2b304b 0%, #232736 100%);
+  --login-tab-active-background: #b0baff;
+  --login-tab-active-text: #11131d;
+  --login-tab-hover-background: #292f40;
   color-scheme: dark;
 }
 
@@ -65,7 +75,6 @@ body {
 
 .login-shell {
   --login-button-gap: 16px;
-  --login-action-width: min(240px, 100%);
 
   box-sizing: border-box;
   display: flex;
@@ -100,12 +109,21 @@ body {
   white-space: nowrap;
 }
 
-.login-panel,
-.login-tabs,
 .login-unavailable {
   width: min(320px, 100%);
 }
 
+.login-card {
+  box-sizing: border-box;
+  width: min(400px, 100%);
+  margin-top: 24px;
+  padding: 20px 24px;
+  border: 1.5px solid #000000;
+  border-radius: 16px;
+  background: var(--login-surface);
+}
+
+.login-panel,
 .login-form,
 .login-feedback,
 .login-secondary-actions {
@@ -120,7 +138,7 @@ body {
   box-sizing: border-box;
   margin: 24px 0 0;
   padding: 10px 12px;
-  border: 1px solid #a5b4fc;
+  border: 1.5px solid #a5b4fc;
   border-radius: 10px;
   background: #eef2ff;
   color: #3730a3;
@@ -151,14 +169,14 @@ body {
   padding: 10px 14px;
   align-items: center;
   gap: 12px;
-  border: 1px solid var(--login-border);
+  border: 2.5px solid #000000;
   border-radius: 10px;
-  background: var(--login-field-background);
+  background: #ffffff;
 }
 
 .login-input-frame:focus-within {
-  border-color: #7f90fd;
-  box-shadow: 0 0 0 3px rgb(127 144 253 / 25%);
+  border-color: #4f5fcb;
+  box-shadow: 0 0 0 3px rgb(79 95 203 / 25%);
 }
 
 .login-icon-slot {
@@ -172,7 +190,7 @@ body {
 
 .login-icon-slot svg {
   display: block;
-  color: var(--login-muted);
+  color: #555555;
 }
 
 .login-input {
@@ -183,18 +201,19 @@ body {
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--login-foreground);
+  color: #000000;
+  color-scheme: light;
   font: 500 17px/normal var(--login-font);
 }
 
 .login-input::placeholder {
-  color: var(--login-muted);
+  color: #555555;
   opacity: 1;
 }
 
 .login-primary-button {
   display: block;
-  width: var(--login-action-width);
+  width: 100%;
   max-width: 100%;
   height: 44px;
   padding: 0 24px;
@@ -240,14 +259,14 @@ body {
 
 .login-google-button {
   display: flex;
-  width: var(--login-action-width);
+  width: 100%;
   max-width: 100%;
   min-height: 44px;
   padding: 0 18px;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border: 1px solid var(--login-border);
+  border: 1.5px solid var(--login-border);
   border-radius: 100px;
   background: var(--login-surface);
   color: var(--login-foreground);
@@ -301,7 +320,7 @@ body {
   box-sizing: border-box;
   margin: 30px 0 0;
   padding: 14px;
-  border: 1px solid var(--login-border);
+  border: 1.5px solid var(--login-border);
   border-radius: 10px;
   color: var(--login-muted);
   font: 500 15px/1.5 var(--login-font);
@@ -328,32 +347,47 @@ body {
   font: 700 13px/1.5 var(--login-font);
 }
 
-.login-display-button:hover,
-.login-tabs button:hover:not(:disabled) {
+.login-display-button:hover {
   background: var(--login-selected-background);
   color: var(--login-selected-text);
 }
 
 .login-tabs {
   display: flex;
-  margin-top: 24px;
+  box-sizing: border-box;
+  width: min(270px, 90%);
+  margin: 0 auto;
   padding: 4px;
   border-radius: 12px;
   background: var(--login-tabs-background);
+}
+
+@media (max-width: 400px) {
+  .login-card {
+    margin-top: 12px;
+    padding: 16px;
+  }
 }
 
 .login-tabs button {
   flex: 1;
   min-height: 40px;
   border-radius: 9px;
+  border: 0;
+  background: transparent;
   color: var(--login-muted);
   cursor: pointer;
   font: 700 16px/1.5 var(--login-font);
 }
 
+.login-tabs button[aria-selected="false"]:hover:not(:disabled) {
+  background: var(--login-tab-hover-background);
+  color: var(--login-foreground);
+}
+
 .login-tabs button[aria-selected="true"] {
-  background: var(--login-surface);
-  color: var(--login-selected-text);
+  background: var(--login-tab-active-background);
+  color: var(--login-tab-active-text);
   box-shadow: 0 1px 4px rgb(0 0 0 / 8%);
 }
 
@@ -361,3 +395,31 @@ body {
   margin: 22px 0 -8px;
   font: 700 18px/1.5 var(--login-font);
 }
+
+/* Shared display settings and visual foundation for non-login screens. */
+.global-display-bar { position: sticky; top: 0; z-index: 40; display: flex; justify-content: flex-end; align-items: center; height: 56px; padding: 0 16px; background: var(--ui-surface); border-bottom: 1.5px solid #000; }
+.global-display-controls { display: flex; gap: 8px; }
+.global-display-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--ui-border); border-radius: 100px; background: var(--ui-surface); color: var(--ui-text); font: 700 15px/1.5 var(--font-sans); cursor: pointer; }
+.global-display-button:focus-visible { outline: 3px solid #7f90fd; outline-offset: 3px; }
+.workspace-logo-mark { font: 400 15px/1 "Zen Dots", var(--font-sans); letter-spacing: 0; }
+.ui-page-heading h1, .ui-panel h2, .ui-empty h2, .dashboard-title { font-family: "Zen Dots", var(--font-sans); }
+.dashboard-title { font-size: clamp(1.65rem, 4vw, 2rem); font-weight: 700; }
+.workspace-tabs { border-bottom: 1.5px solid #000; }
+.workspace-tabs a { border: 1.5px solid #000; }
+.workspace-tenant, .workspace-details, .workspace-card, .ui-table { border-color: #000; }
+.workspace-filter .ui-input { font-size: 17px; }
+html[data-theme="dark"] { color-scheme: dark; --ui-bg: #11131d; --ui-surface: #202433; --ui-text: #f2f3fa; --ui-muted: #c1c7d9; --ui-border: #747c96; --ui-accent: #5364d4; --ui-accent-soft: #303954; }
+html[data-theme="dark"] body { background: var(--ui-bg); color: var(--ui-text); }
+html[data-theme="dark"] .workspace, html[data-theme="dark"] .management-main { color-scheme: dark; }
+html[data-theme="dark"] .ui-standalone { color-scheme: dark; }
+html[data-theme="dark"] .workspace-sidebar, html[data-theme="dark"] .workspace-topbar, html[data-theme="dark"] .landing-header, html[data-theme="dark"] .ui-table, html[data-theme="dark"] .workspace-export { background: var(--ui-surface); color: var(--ui-text); }
+html[data-theme="dark"] .workspace-sidebar nav a, html[data-theme="dark"] .workspace-catalog { color: var(--ui-text); }
+html[data-theme="dark"] .workspace-sidebar nav a:hover, html[data-theme="dark"] .workspace-catalog:hover, html[data-theme="dark"] .workspace-tabs a:not([aria-current="page"]):hover { background: #303954; }
+html[data-theme="dark"] .workspace-sidebar a.active { background: #303954; color: #fff; }
+html[data-theme="dark"] .ui-table th { background: #303954; color: #fff; }
+html[data-theme="dark"] .workspace-breadcrumb strong { color: var(--ui-text); }
+html[data-theme="dark"] .ui-text-link, html[data-theme="dark"] .ui-table a, html[data-theme="dark"] .ui-button--ghost, html[data-theme="dark"] .ui-eyebrow { color: #c5ccff; }
+html[data-theme="dark"] .ui-alert:not(.ui-alert--warning):not(.ui-alert--danger):not(.ui-alert--success) { color: #e4e7ff; }
+html[data-theme="dark"] .ui-field-error { color: #ffc3cc; }
+.workspace h3, .ui-standalone h3 { font-family: "Zen Dots", var(--font-sans); }
+@media print { .global-display-bar { display: none; } }

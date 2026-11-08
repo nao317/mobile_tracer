@@ -24,6 +24,8 @@ services:
     <<: *daemon
     ports: !reset []
     environment:
+      APP_ENV: production
+      ENABLE_UI_PREVIEW: "0"
       AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:?Set HTTPS origin in .env.public}
       TRUSTED_PROXY_CIDRS: ${PUBLIC_PROXY_IP:-172.30.72.2}/32
 

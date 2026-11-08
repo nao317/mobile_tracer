@@ -5,7 +5,14 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
+  useRouteLoaderData,
 } from "react-router";
+import {
+  DisplayControls,
+  DisplaySettingsProvider,
+  useDisplaySettings,
+} from "./components/ui/display-settings";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -23,9 +30,33 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+export function loader({ request }: Route.LoaderArgs) {
+  const cookies = request.headers.get("Cookie") || "";
+  return {
+    language: /(?:^|;\s*)mt_locale=en(?:;|$)/.test(cookies)
+      ? ("en" as const)
+      : ("ja" as const),
+    theme: /(?:^|;\s*)mt_theme=dark(?:;|$)/.test(cookies)
+      ? ("dark" as const)
+      : ("light" as const),
+  };
+}
 export function Layout({ children }: { children: React.ReactNode }) {
+  const settings = useRouteLoaderData<typeof loader>("root");
   return (
-    <html lang="ja">
+    <DisplaySettingsProvider
+      initialLanguage={settings?.language ?? "ja"}
+      initialTheme={settings?.theme ?? "light"}
+    >
+      <Document>{children}</Document>
+    </DisplaySettingsProvider>
+  );
+}
+function Document({ children }: { children: React.ReactNode }) {
+  const { language, theme } = useDisplaySettings();
+  const isLogin = useLocation().pathname === "/login";
+  return (
+    <html lang={language} data-theme={theme}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -33,6 +64,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
+        {!isLogin && (
+          <header className="global-display-bar">
+            <DisplayControls />
+          </header>
+        )}
         {children}
         <ScrollRestoration />
         <Scripts />

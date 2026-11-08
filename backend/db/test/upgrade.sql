@@ -101,3 +101,14 @@ BEGIN
   PERFORM pg_temp.assert_true(format('Firebase移行前後で %I.%I の内容が同じ',t.schema_name,t.table_name),actual=t.rows);
  END LOOP;
 END $$;
+
+-- 既存の明示的な所属を業者ユーザーとして引き継ぎ、未所属の利用者は一般とする。
+INSERT INTO auth.users(id,issuer,subject) VALUES(pg_temp.u('ab03'),'https://securetoken.google.com/demo-mobile-tracer','new-general');
+\ir ../migrations/000005_user_company_requests.up.sql
+SELECT pg_temp.assert_true('所属済みユーザーの業者区分を引き継ぐ',
+ EXISTS(SELECT 1 FROM auth.users WHERE id=pg_temp.u('ab01') AND account_type='business'));
+SELECT pg_temp.assert_true('未所属ユーザーは一般のまま',
+ EXISTS(SELECT 1 FROM auth.users WHERE id=pg_temp.u('ab03') AND account_type='general'));
+SELECT pg_temp.assert_true('管理機能の移行でも所属と監査履歴を保持する',
+ NOT EXISTS(SELECT * FROM old_auth_links EXCEPT SELECT * FROM auth.staff_links)
+ AND NOT EXISTS(SELECT * FROM old_audit EXCEPT SELECT * FROM audit.events));

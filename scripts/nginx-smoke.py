@@ -60,7 +60,7 @@ def main():
     if body.strip() != b"ok":
         raise RuntimeError("Nginx health check did not respond")
     body, content_type = fetch(base, "/")
-    if content_type != "text/html" or b"New React Router App" not in body or "What's next?" not in unescape(body.decode()):
+    if content_type != "text/html" or b"Mobile Tracer" not in body or "業務をはじめる" not in unescape(body.decode()):
         raise RuntimeError("SSR home page content was not returned")
     assets = Assets()
     assets.feed(body.decode())

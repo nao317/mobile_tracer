@@ -28,6 +28,8 @@ type User struct {
 	Subject       string `json:"-"`
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
+	AccountType   string `json:"account_type"`
+	DisplayName   string `json:"display_name"`
 	Status        string `json:"-"`
 }
 type Session struct {
@@ -153,6 +155,9 @@ func (s *Service) AuthorizeBusiness(r *http.Request) (business.Principal, error)
 	if count != 1 {
 		return business.Principal{}, business.Forbidden()
 	}
+	if a.User.AccountType != "business" {
+		return business.Principal{}, business.Forbidden()
+	}
 	return s.business.ResolveStaff(r.Context(), *a.Session.SelectedStaffID)
 }
 
@@ -180,6 +185,9 @@ func LinkStaff(ctx context.Context, db *gorm.DB, projectID, subject, staffID str
 		} else {
 			// The partial unique index makes retries harmless without modifying previous links.
 			if err := tx.Exec("INSERT INTO auth.staff_links(user_id,tenant_id,staff_id) VALUES (?,?,?) ON CONFLICT DO NOTHING", user.ID, staff.TenantID, staff.ID).Error; err != nil {
+				return err
+			}
+			if err := tx.Table("auth.users").Where("id=? AND account_type='general'", user.ID).Updates(map[string]any{"account_type": "business", "version": gorm.Expr("version + 1")}).Error; err != nil {
 				return err
 			}
 		}
