@@ -16,9 +16,16 @@ class Assets(HTMLParser):
     def __init__(self):
         super().__init__()
         self.paths = set()
+        self.in_main = False
+        self.main_text = []
+        self.main_links = set()
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if tag == "main":
+            self.in_main = True
+        if tag == "a" and self.in_main:
+            self.main_links.add(attrs.get("href", ""))
         if tag in ("script", "img"):
             path = attrs.get("src", "")
         elif tag == "link":
@@ -27,6 +34,24 @@ class Assets(HTMLParser):
             return
         if path.startswith("/assets/"):
             self.paths.add(path)
+
+    def handle_endtag(self, tag):
+        if tag == "main":
+            self.in_main = False
+
+    def handle_data(self, text):
+        if self.in_main:
+            self.main_text.append(text)
+
+
+def check_home(body, content_type):
+    page = Assets()
+    page.feed(body.decode())
+    if (content_type != "text/html"
+            or "ホーム" not in "".join(page.main_text)
+            or not {"/login", "/login?mode=register"}.issubset(page.main_links)):
+        raise RuntimeError("SSR home page content was not returned")
+    return page
 
 
 def fetch(base, path, headers=None, status=200):
@@ -60,10 +85,7 @@ def main():
     if body.strip() != b"ok":
         raise RuntimeError("Nginx health check did not respond")
     body, content_type = fetch(base, "/")
-    if content_type != "text/html" or b"Mobile Tracer" not in body or "業務をはじめる" not in unescape(body.decode()):
-        raise RuntimeError("SSR home page content was not returned")
-    assets = Assets()
-    assets.feed(body.decode())
+    assets = check_home(body, content_type)
     if not any(p.endswith(".js") for p in assets.paths) or not any(p.endswith(".css") for p in assets.paths):
         raise RuntimeError("Home page did not reference JavaScript and CSS assets")
     for path in assets.paths:
@@ -72,7 +94,7 @@ def main():
             raise RuntimeError(f"Static asset was not returned: {path}")
     for path in ("/not-a-real-page", "/apiary"):
         body, kind = fetch(base, path, status=404)
-        if kind != "text/html" or b"The requested page could not be found." not in body:
+        if kind != "text/html" or "対象が見つかりません。" not in unescape(body.decode()):
             raise RuntimeError("Frontend 404 was not preserved")
     for path in ("/api", "/api/not-a-real-endpoint"):
         body, kind = fetch(base, path, status=404)
