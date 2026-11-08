@@ -1,0 +1,4 @@
+.target { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding-block: .5rem 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--ui-border); }
+.identifiers { margin-left: auto; color: var(--ui-muted); font-size: .875rem; max-width: 100%; }
+.identifiers summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.identifiers dl { display: grid; gap: .25rem; overflow-wrap: anywhere; }

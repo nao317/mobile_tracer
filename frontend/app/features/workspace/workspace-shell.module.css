@@ -1,0 +1,4 @@
+.preview { border-bottom: 1px solid var(--ui-border); padding-block: .5rem; margin-bottom: 1rem; font-size: .875rem; }
+.preview summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--ui-muted); }
+.controls { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; padding-block: .5rem; }
+.controls label { display: grid; gap: .5rem; }

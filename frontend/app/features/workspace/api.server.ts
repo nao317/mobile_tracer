@@ -72,32 +72,92 @@ async function businessAuth(request: Request) {
     throw redirect("/account", { headers: auth.headers });
   return auth;
 }
-function listQuery(request: Request, cases: boolean) {
+function pageQuery(request: Request, auth: AuthContext, key = "page") {
+  const value = new URL(request.url).searchParams.get(key) ?? "1";
+  if (
+    !/^\d+$/.test(value) ||
+    !z.coerce.number().int().min(1).max(1000000).safeParse(value).success
+  )
+    throw new Response("検索条件を確認してください。", {
+      status: 400,
+      headers: auth.headers,
+    });
+  return new URLSearchParams({ page: String(Number(value)), page_size: "20" });
+}
+function listQuery(request: Request, auth: AuthContext, cases: boolean) {
   const search = new URL(request.url).searchParams;
   const parsed = z
     .object({
-      page: z.coerce.number().int().min(1).max(1000000),
       q: z.string().max(200),
       case_type: z.enum(["", "rental", "dealer", "repair"]),
       status: z.enum(["", "in_progress", "completed", "cancelled"]),
     })
     .safeParse({
-      page: search.get("page") ?? 1,
       q: search.get("q") ?? "",
-      case_type: search.get("case_type") ?? "",
-      status: search.get("status") ?? "",
+      case_type: cases ? search.get("case_type") ?? "" : "",
+      status: cases ? search.get("status") ?? "" : "",
     });
   if (!parsed.success)
-    throw new Response("検索条件を確認してください。", { status: 400 });
-  const query = new URLSearchParams({
-    page: String(parsed.data.page),
-    page_size: "20",
-  });
+    throw new Response("検索条件を確認してください。", {
+      status: 400,
+      headers: auth.headers,
+    });
+  const query = pageQuery(request, auth);
   if (parsed.data.q) query.set("q", parsed.data.q);
-  if (cases && parsed.data.case_type)
-    query.set("case_type", parsed.data.case_type);
-  if (cases && parsed.data.status) query.set("status", parsed.data.status);
+  if (parsed.data.case_type) query.set("case_type", parsed.data.case_type);
+  if (parsed.data.status) query.set("status", parsed.data.status);
   return query;
+}
+
+/** The API returns an empty page past the end; retrieve the actual last page. */
+async function readPage<T>(
+  request: Request,
+  auth: AuthContext,
+  path: string,
+  query: URLSearchParams,
+  schema: z.ZodType<T>,
+) {
+  while (true) {
+    const result = await read(
+      request,
+      auth,
+      `${path}?${query}`,
+      z.object({ data: z.array(schema), pagination: paginationSchema }),
+    );
+    const lastPage = Math.max(
+      1,
+      Math.ceil(result.pagination.total / result.pagination.page_size),
+    );
+    if (Number(query.get("page")) <= lastPage) return result;
+    query.set("page", String(lastPage));
+  }
+}
+
+/** Deduplicate relations and cap concurrent detail requests for displayed rows. */
+async function caseVehicles(
+  request: Request,
+  auth: AuthContext,
+  cases: WorkspaceData["cases"],
+) {
+  const ids = [...new Set(cases.map((item) => item.vehicle_id))];
+  const vehicles: WorkspaceData["vehicles"] = [];
+  for (let offset = 0; offset < ids.length; offset += 4) {
+    const batch = await Promise.all(
+      ids.slice(offset, offset + 4).map(
+        async (id) =>
+          (
+            await read(
+              request,
+              auth,
+              `/api/vehicles/${id}`,
+              z.object({ data: vehicleSchema }),
+            )
+          ).data,
+      ),
+    );
+    vehicles.push(...batch);
+  }
+  return vehicles;
 }
 
 export async function loadWorkspace(request: Request, path: string) {
@@ -122,158 +182,140 @@ export async function loadWorkspace(request: Request, path: string) {
     versions: [],
     workflow: null,
   };
-  if (coreScreens.has(screen.key)) {
-    const [vehicles, cases] = await Promise.all([
-      read(
-        request,
-        auth,
-        `/api/vehicles?${screen.key === "vehicles" ? listQuery(request, false) : "page_size=100"}`,
-        z.object({
-          data: z.array(vehicleSchema),
-          pagination: paginationSchema,
-        }),
-      ),
-      read(
-        request,
-        auth,
-        `/api/cases?${screen.key === "cases" ? listQuery(request, true) : "page_size=100"}`,
-        z.object({ data: z.array(caseSchema), pagination: paginationSchema }),
-      ),
-    ]);
+  if (screen.key === "vehicles" || screen.key === "case-new") {
+    const query = listQuery(request, auth, false);
+    const selected =
+      screen.key === "case-new"
+        ? new URL(request.url).searchParams.get("vehicle")
+        : null;
+    if (selected && !idSchema.safeParse(selected).success)
+      throw new Response("車両を確認してください。", {
+        status: 400,
+        headers: auth.headers,
+      });
+    const vehicles = await readPage(
+      request, auth, "/api/vehicles", query, vehicleSchema,
+    );
     snapshot.vehicles = vehicles.data;
+    snapshot.pagination = snapshot.vehiclesPagination = vehicles.pagination;
+    if (selected)
+      snapshot.selectedVehicle =
+        vehicles.data.find((vehicle) => vehicle.id === selected) ??
+        (
+          await read(
+            request,
+            auth,
+            `/api/vehicles/${selected}`,
+            z.object({ data: vehicleSchema }),
+          )
+        ).data;
+  } else if (screen.key === "cases") {
+    const cases = await readPage(
+      request, auth, "/api/cases", listQuery(request, auth, true), caseSchema,
+    );
     snapshot.cases = cases.data;
-    if (screen.key === "vehicles") snapshot.pagination = vehicles.pagination;
-    if (screen.key === "cases") snapshot.pagination = cases.pagination;
-    if (screen.key === "case-new") {
-      const vehicleId = new URL(request.url).searchParams.get("vehicle");
-      if (vehicleId) {
-        if (!idSchema.safeParse(vehicleId).success)
-          throw new Response("車両を確認してください。", {
-            status: 400,
-            headers: auth.headers,
-          });
-        if (!snapshot.vehicles.some((vehicle) => vehicle.id === vehicleId))
-          snapshot.vehicles.unshift(
-            (
-              await read(
-                request,
-                auth,
-                `/api/vehicles/${vehicleId}`,
-                z.object({ data: vehicleSchema }),
-              )
-            ).data,
-          );
-      }
-    }
-    if (screen.params.vehicleId) {
-      const item = (
-        await read(
-          request,
-          auth,
-          `/api/vehicles/${screen.params.vehicleId}`,
-          z.object({ data: vehicleSchema }),
-        )
-      ).data;
-      snapshot.vehicles = [
-        item,
-        ...snapshot.vehicles.filter((v) => v.id !== item.id),
-      ];
-      const related = await read(
+    snapshot.pagination = snapshot.casesPagination = cases.pagination;
+    snapshot.vehicles = await caseVehicles(request, auth, cases.data);
+  } else if (screen.key === "vehicle") {
+    const editing = new URL(request.url).searchParams.get("view") === "edit";
+    const query = editing ? null : pageQuery(request, auth, "relatedPage");
+    query?.set("vehicle_id", screen.params.vehicleId);
+    const [vehicle, related] = await Promise.all([
+      read(
         request,
         auth,
-        `/api/cases?vehicle_id=${item.id}&page_size=100`,
-        z.object({ data: z.array(caseSchema), pagination: paginationSchema }),
-      );
+        `/api/vehicles/${screen.params.vehicleId}`,
+        z.object({ data: vehicleSchema }),
+      ),
+      query ? readPage(request, auth, "/api/cases", query, caseSchema) : null,
+    ]);
+    snapshot.vehicles = [vehicle.data];
+    if (related) {
       snapshot.cases = related.data;
-      if (related.pagination.total > related.data.length)
-        snapshot.notice =
-          "関連案件は最初の100件を表示しています。案件一覧で絞り込んで確認してください。";
+      snapshot.relatedPagination = related.pagination;
     }
-    if (screen.params.caseId) {
-      const item = (
-        await read(
-          request,
-          auth,
-          `/api/cases/${screen.params.caseId}`,
-          z.object({ data: caseSchema }),
-        )
-      ).data;
-      snapshot.cases = [
-        item,
-        ...snapshot.cases.filter((c) => c.id !== item.id),
-      ];
-      if (!snapshot.vehicles.some((v) => v.id === item.vehicle_id))
-        snapshot.vehicles.push(
-          (
-            await read(
-              request,
-              auth,
-              `/api/vehicles/${item.vehicle_id}`,
-              z.object({ data: vehicleSchema }),
-            )
-          ).data,
-        );
-      snapshot.records = (
-        await read(
-          request,
-          auth,
-          `/api/cases/${item.id}/records?page_size=100`,
-          z.object({
-            data: z.array(recordSchema),
-            pagination: paginationSchema,
-          }),
-        )
-      ).data;
-      if (context.configuration?.id !== item.configuration_version_id)
-        snapshot.notice =
-          "この案件が使用する設定版を取得できないため、項目編集と段階変更を停止しています。";
+  } else if (
+    ["case", "case-records", "case-manage", "record-new", "record", "record-edit", "record-history"].includes(screen.key)
+  ) {
+    const recordPath = `/api/cases/${screen.params.caseId}/records`;
+    const recordsQuery =
+      screen.key === "case-records" ? pageQuery(request, auth, "recordsPage") : null;
+    const historyQuery =
+      screen.key === "record-history" ? pageQuery(request, auth, "historyPage") : null;
+    historyQuery?.set("sort", "-version_no");
+    const selected =
+      screen.params.recordId
+        ? new URL(request.url).searchParams.get("version")
+        : null;
+    if (selected && !idSchema.safeParse(selected).success)
+      throw new Response("版を確認してください。", {
+        status: 400,
+        headers: auth.headers,
+      });
+    const item = (
+      await read(
+        request,
+        auth,
+        `/api/cases/${screen.params.caseId}`,
+        z.object({ data: caseSchema }),
+      )
+    ).data;
+    snapshot.cases = [item];
+    snapshot.vehicles = await caseVehicles(request, auth, [item]);
+    if (context.configuration?.id !== item.configuration_version_id)
+      snapshot.notice =
+        "この案件が使用する設定版を取得できないため、項目編集と段階変更を停止しています。";
+    if (recordsQuery) {
+      const records = await readPage(
+        request, auth, recordPath, recordsQuery, recordSchema,
+      );
+      snapshot.records = records.data;
+      snapshot.recordsPagination = records.pagination;
     }
     if (screen.params.recordId) {
       const record = (
         await read(
           request,
           auth,
-          `/api/cases/${screen.params.caseId}/records/${screen.params.recordId}`,
+          `${recordPath}/${screen.params.recordId}`,
           z.object({ data: recordSchema }),
         )
       ).data;
-      snapshot.records = [
-        record,
-        ...snapshot.records.filter((r) => r.id !== record.id),
-      ];
-      snapshot.versions = (
-        await read(
+      snapshot.records = [record];
+      const versionsPath = `${recordPath}/${record.id}/versions`;
+      if (historyQuery) {
+        const history = await readPage(
+          request, auth, versionsPath, historyQuery, versionSchema,
+        );
+        snapshot.versions = history.data;
+        snapshot.historyPagination = history.pagination;
+      }
+      if (selected) {
+        snapshot.selectedVersion =
+          snapshot.versions.find((version) => version.id === selected) ??
+          (
+            await read(
+              request,
+              auth,
+              `${versionsPath}/${selected}`,
+              z.object({ data: versionSchema }),
+            )
+          ).data;
+      } else if (snapshot.historyPagination?.page === 1) {
+        snapshot.selectedVersion = snapshot.versions[0] ?? null;
+      } else {
+        const latest = await readPage(
           request,
           auth,
-          `/api/cases/${record.case_id}/records/${record.id}/versions?page_size=100&sort=-version_no`,
-          z.object({
-            data: z.array(versionSchema),
-            pagination: paginationSchema,
-          }),
-        )
-      ).data;
-      const selected = new URL(request.url).searchParams.get("version");
-      if (selected) {
-        if (!idSchema.safeParse(selected).success)
-          throw new Response("版を確認してください。", {
-            status: 400,
-            headers: auth.headers,
-          });
-        const version = (
-          await read(
-            request,
-            auth,
-            `/api/cases/${record.case_id}/records/${record.id}/versions/${selected}`,
-            z.object({ data: versionSchema }),
-          )
-        ).data;
-        snapshot.versions = [
-          version,
-          ...snapshot.versions.filter((v) => v.id !== version.id),
-        ];
+          versionsPath,
+          new URLSearchParams({ page: "1", page_size: "1", sort: "-version_no" }),
+          versionSchema,
+        );
+        snapshot.selectedVersion = latest.data[0] ?? null;
       }
     }
   }
+
   return data(
     {
       snapshot,
@@ -370,6 +412,7 @@ export async function mutateWorkspace(request: Request) {
       if (!context.configuration?.settings.businesses[values.case_type])
         return data<CommandResult>(
           {
+            code: "configuration_unavailable",
             error:
               "この業態で利用できる設定がありません。管理者に確認してください。",
           },
@@ -428,7 +471,7 @@ export async function mutateWorkspace(request: Request) {
         };
       } else if (!rules)
         return data<CommandResult>(
-          { error: "案件開始時の設定版を取得できないため、変更できません。" },
+          { code: "configuration_unavailable", error: "案件開始時の設定版を取得できないため、変更できません。" },
           { status: 409, headers: auth.headers },
         );
       else if (intent === "updateCase") {
@@ -439,7 +482,7 @@ export async function mutateWorkspace(request: Request) {
           !rules.transitions[item.stage]?.includes(stage)
         )
           return data<CommandResult>(
-            { error: "この段階には変更できません。" },
+            { code: "invalid_transition", error: "この段階には変更できません。" },
             { status: 409, headers: auth.headers },
           );
         body = { stage };
@@ -465,7 +508,7 @@ export async function mutateWorkspace(request: Request) {
             version.configuration_version_id !== item.configuration_version_id
           )
             return data<CommandResult>(
-              { error: "この版は編集できません。" },
+              { code: "version_not_editable", error: "この版は編集できません。" },
               { status: 409, headers: auth.headers },
             );
           recordKind = record.record_kind;
@@ -477,6 +520,7 @@ export async function mutateWorkspace(request: Request) {
           if (lockVersion !== version.lock_version)
             return data<CommandResult>(
               {
+                code: "version_conflict",
                 error:
                   "別の更新が保存されています。入力を控えてから最新の版を開き、差分を確認してください。",
                 fields: {},
@@ -506,7 +550,7 @@ export async function mutateWorkspace(request: Request) {
       }
     } else
       return data<CommandResult>(
-        { error: "この操作は現在利用できません。" },
+        { code: "unsupported_operation", error: "この操作は現在利用できません。" },
         { status: 400, headers: auth.headers },
       );
     let response: Response;
@@ -524,6 +568,7 @@ export async function mutateWorkspace(request: Request) {
     } catch {
       return data<CommandResult>(
         {
+          code: "result_unknown",
           error:
             "保存結果が未確定です。一覧・詳細で結果を確認してから再操作してください。",
           uncertain: true,
@@ -552,6 +597,7 @@ export async function mutateWorkspace(request: Request) {
       };
       return data<CommandResult>(
         {
+          code: error?.code ?? "request_failed",
           error:
             messages[error?.code ?? ""] ??
             "保存できませんでした。結果を確認してから再操作してください。",
@@ -571,6 +617,7 @@ export async function mutateWorkspace(request: Request) {
       if (!parsed.success)
         return data<CommandResult>(
           {
+            code: "result_unknown",
             error:
               "保存応答を確認できませんでした。結果が未確定のため、一覧で結果を確認してから再操作してください。",
             uncertain: true,
@@ -586,13 +633,13 @@ export async function mutateWorkspace(request: Request) {
       });
     }
     return data<CommandResult>(
-      { message: "保存しました。" },
+      { code: "saved", message: "保存しました。" },
       { headers: auth.headers },
     );
   } catch (error) {
     if (error instanceof InvalidInput)
       return data<CommandResult>(
-        { error: error.message, fields: error.fields },
+        { code: "validation_error", error: error.message, fields: error.fields },
         { status: 400, headers: auth.headers },
       );
     throw error;

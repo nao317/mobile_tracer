@@ -14,6 +14,23 @@
 
 アカウント画面から各画面へ移動する。管理者はFirebaseで確認済みのメールと`SYSTEM_ADMIN_EMAILS`を照合して判定する。指定するアカウントは`nao.yellowtail.1729@gmail.com`。メール文字列や区分をブラウザーから送って管理者権限を得ることはできない。システム管理者の権限と、企業内の業務権限は別に扱う。
 
+設定の入口は`/settings`。アカウント、表示設定、自分の申請、所属企業へ移動する。所属を選択していない利用者も、セッション認証で設定と申請を利用できる。
+
+一覧は検索と結果に絞り、作成・編集・審査は次のURLで開く。queryも画面の状態として扱うため、直接アクセスと再読み込みで同じ操作を開ける。
+
+| 入口 | 作業別URL |
+| --- | --- |
+| `/admin/users` | `?user=:id&view=detail`、`?user=:id&view=edit` |
+| `/admin/companies` | `?company=:id&view=detail`、`?company=:id&view=edit`、`?company=:id&view=members`、`?view=new` |
+| `/admin/requests` | `?request=:id&view=detail`、`?request=:id&view=review` |
+| `/account/requests` | `?view=history`、`?view=detail&request=:id`、`?view=upgrade`、`?view=new-company`、`?view=companies`、`?view=company&company=:id`、`?view=profile&company=:id` |
+
+自分の承認待ち申請は、履歴の表示ページとは別の問い合わせで確認する。所属追加・初期管理者の候補検索は、企業作成または所属管理の画面で取得する。
+
+候補検索は20件ずつAPIから取得し、所属者は詳細レスポンスの全配列を20件ずつ表示する。検索条件とページは一覧から詳細・編集へ引き継ぐ。戻り先は同じ管理画面内のパスとして検証する。
+
+申請APIには単件取得がないため、申請詳細・審査は一覧APIを100件ずつ取得して対象IDを探す。履歴の検索条件や審査による状態変更にかかわらず開けるが、対象までの取得回数は履歴件数に依存する。UI分割のために新しいAPIは追加していない。
+
 一般ユーザーは自分の区分を直接変更できない。業者ユーザーも企業情報を直接反映できず、申請には管理者の承認が必要。自分が所属しない企業への変更申請は拒否する。システム管理者は管理画面から直接変更でき、その操作も監査履歴へ記録する。
 
 ## 企業と所属

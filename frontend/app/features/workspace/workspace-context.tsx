@@ -9,7 +9,6 @@ import {
 import { useNavigate } from "react-router";
 import type { CommandResult, Role, WorkspaceData } from "./model";
 import { executePreview } from "./preview-commands";
-import { createPreviewData } from "./preview-data";
 
 type Environment = {
   mode: "live" | "preview";
@@ -45,6 +44,7 @@ export function PreviewProvider({
   children: ReactNode;
 }) {
   const [snapshot, setSnapshot] = useState(initial);
+  const initialSnapshot = useRef(initial);
   const photoUrls = useRef<string[]>([]);
   useEffect(
     () => () => {
@@ -106,7 +106,7 @@ export function PreviewProvider({
         reset: () => {
           for (const url of photoUrls.current) URL.revokeObjectURL(url);
           photoUrls.current = [];
-          setSnapshot(createPreviewData());
+          setSnapshot(structuredClone(initialSnapshot.current));
         },
         changeRole,
       }}

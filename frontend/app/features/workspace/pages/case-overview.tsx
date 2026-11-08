@@ -1,0 +1,54 @@
+import { CoreBackLink } from "./navigation";
+import appStyles from "../../../app.module.css";
+import workspaceStyles from "../workspace.module.css";
+import { useCoreI18n } from "./core-messages";
+
+import { Alert, Panel } from "../../../components/ui/primitives";
+import { rulesFor, type BusinessCase } from "../model";
+
+import { useWorkspace } from "../workspace-context";
+
+export function CaseScreen({ item }: { item: BusinessCase; }) {
+  const { c, enumLabel, formatDate } = useCoreI18n();
+
+  const { snapshot, base } = useWorkspace();
+  const rules = rulesFor(snapshot, item);
+  return (
+    <>
+      <CoreBackLink to={`${base}/cases`} />
+      <Panel title={c("workspace.case.progress")}>
+    <div className={workspaceStyles["workspace-step"]}>
+      {rules?.stages.map((stage) => (
+        <span key={stage}>
+          {enumLabel("stage", stage)}
+          {stage === item.stage ? c("workspace.case.current") : ""}
+        </span>
+      ))}
+    </div>
+    <dl className={[workspaceStyles["workspace-summary"], appStyles["mt-5"]].join(" ")}>
+      <div>
+        <dt>{c("workspace.case.assignee")}</dt>
+        <dd>
+          {item.assignee_id === snapshot.context.principal.staff_id
+            ? c("workspace.case.self")
+            : item.assignee_id
+              ? c("workspace.case.assigned")
+              : c("workspace.case.unassigned")}
+        </dd>
+      </div>
+      <div>
+        <dt>{c("workspace.common.createdAt")}</dt>
+        <dd>{formatDate(item.created_at)}</dd>
+      </div>
+      <div>
+        <dt>{c("workspace.case.configurationVersion")}</dt>
+        <dd>{item.configuration_version_id.slice(-8)}</dd>
+      </div>
+    </dl>
+    {item.cancel_reason && (
+      <Alert tone="warning">{c("workspace.case.cancelReasonPrefix")}{item.cancel_reason}</Alert>
+    )}
+  </Panel>
+    </>
+  );
+}

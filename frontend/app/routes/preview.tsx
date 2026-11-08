@@ -1,14 +1,16 @@
 import { data } from "react-router";
 import type { Route } from "./+types/preview";
 import { previewEnabled } from "../features/workspace/api.server";
-import { createPreviewData } from "../features/workspace/preview-data";
+import { createPreviewManagementReviewData } from "../features/workspace/preview-management/view-catalog";
 import { resolveScreen } from "../features/workspace/screens";
 import { PreviewProvider } from "../features/workspace/workspace-context";
 import { WorkspaceView } from "../features/workspace/workspace-view";
+import { screenTitle } from "../i18n";
+import { routeLocale } from "../i18n/route-locale";
 
-export function meta() {
+export function meta({ matches, loaderData }: Route.MetaArgs) {
   return [
-    { title: "画面プレビュー | Mobile Tracer" },
+    { title: `${screenTitle(routeLocale(matches), loaderData?.screen.key ?? "catalog")} | Mobile Tracer` },
     { name: "robots", content: "noindex, nofollow" },
   ];
 }
@@ -24,7 +26,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   const screen = resolveScreen(params["*"] ?? "");
   if (!screen) throw new Response("Not Found", { status: 404 });
   return data(
-    { snapshot: createPreviewData(), screen },
+    { snapshot: createPreviewManagementReviewData(), screen },
     { headers: headers() },
   );
 }

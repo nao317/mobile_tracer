@@ -12,7 +12,7 @@ import {
 import { firebaseAuth } from "../../lib/firebase.client";
 import type { FirebaseConfig } from "../../lib/auth.server";
 import { copy, type Language, type Theme, type Failure } from "./messages";
-import { useDisplaySettings } from "../../components/ui/display-settings";
+import { useOptionalDisplaySettings } from "../../components/ui/display-settings";
 
 function authError(error: unknown): Exclude<Failure, ""> {
   const code =
@@ -63,9 +63,11 @@ export function useLogin({
   initialTheme = "light",
   initialMode = "login",
 }: LoginProps) {
-  const display = useDisplaySettings();
-  const [language, setLanguage] = useState<Language>(initialLanguage);
-  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const display = useOptionalDisplaySettings();
+  const [localLanguage, setLanguage] = useState<Language>(initialLanguage);
+  const [localTheme, setTheme] = useState<Theme>(initialTheme);
+  const language = display?.language ?? localLanguage;
+  const theme = display?.theme ?? localTheme;
   const t = copy[language];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -87,13 +89,13 @@ export function useLogin({
   }, [language, t.login]);
   function changeLanguage(next: Language) {
     setLanguage(next);
-    display.setLanguage(next);
+    display?.setLanguage(next);
     document.cookie = `mt_locale=${next}; Path=/; Max-Age=31536000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
   }
   function changeTheme() {
     const next = theme === "light" ? "dark" : "light";
     setTheme(next);
-    display.setTheme(next);
+    display?.setTheme(next);
     document.cookie = `mt_theme=${next}; Path=/; Max-Age=31536000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
   }
   function changeMode(next: typeof mode) {

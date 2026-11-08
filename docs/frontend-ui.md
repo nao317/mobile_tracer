@@ -10,7 +10,7 @@
 APP_ENV=development ENABLE_UI_PREVIEW=1 npm run dev
 ```
 
-`http://localhost:5173/preview/screens`が画面一覧。各画面の上部で役割と表示状態を切り替えられる。変更はブラウザー内のメモリーに保持し、画面間の移動では引き継ぐ。再読み込みすると架空データの初期状態に戻る。写真は端末内のファイルを一時表示するだけで、サーバーへ送信しない。実データは入力しない。
+`http://localhost:5173/preview/screens`が画面一覧。上部の「UIプレビュー」を展開すると、表示確認用の役割と状態を切り替えられる。変更はブラウザー内のメモリーに保持し、画面間の移動では引き継ぐ。再読み込みすると架空データの初期状態に戻る。構成変更・削除・取込には閲覧用のサンプルも用意している。写真は端末内のファイルを一時表示するだけで、サーバーへ送信しない。実データは入力しない。
 
 Composeで確認する場合は、ローカル用の設定を追加する。
 
@@ -20,25 +20,30 @@ docker compose -f compose.yaml -f compose.firebase-emulator.yaml -f compose.ui-p
 
 この場合は`http://localhost:8080/preview/screens`を開く。業務画面の`/app`には、Firebaseのログインと担当者への紐付け、所属選択が必要。認証の準備は[auth.md](auth.md)に従う。
 
-プレビューは`APP_ENV=development`と`ENABLE_UI_PREVIEW=1`の両方を指定した場合だけ有効になる。通常は404を返す。`compose.public.yaml`では`APP_ENV=production`、`ENABLE_UI_PREVIEW=0`に固定する。実APIが失敗しても、プレビューデータには切り替えない。
+プレビューの有効条件は`ENABLE_UI_PREVIEW === "1" && APP_ENV !== "production"`。ローカル確認では上記のように`APP_ENV=development`を明示する。無効時は404を返す。`compose.public.yaml`では`APP_ENV=production`、`ENABLE_UI_PREVIEW=0`に固定する。実APIが失敗しても、プレビューデータには切り替えない。
 
 ## 共通部品と処理の配置
 
 | 配置 | 責務 |
 | --- | --- |
-| `frontend/app/components/ui/` | Button、Input、Select、Textarea、Field、TextField、Alert、Badge、Panel、PageHeader、EmptyStateと共通スタイル |
+| `frontend/app/components/atoms/` | Button、Input、Select、Textarea、Alert、Badge。業務APIを呼ばない基礎部品 |
+| `frontend/app/components/molecules/` | Field、TextField、Panel、EmptyState、共通Pagination等の組合せ部品 |
+| `frontend/app/components/templates/` | AuthenticatedLayout。共通操作領域・折りたたみサイドバー・モバイルドロワー・mainの配置 |
+| `frontend/app/components/ui/` | 既存import用の再export、表示設定、未保存入力の移動確認、SplitText、UIのCSS Module |
+| `frontend/app/i18n/` | 型付きの日英辞書、名前付き引数、日時・数値整形、状態・エラーコードの表示 |
 | `frontend/app/features/management/` | 実APIに接続するユーザー・企業・申請管理の型、通信、共通フォーム・表示部品 |
 | `frontend/app/features/auth/` | ログイン画面、文言、認証・表示状態を扱うフック |
 | `frontend/app/features/workspace/model.ts` | APIの型とZodスキーマ、権限表示、構成版に応じた入力検証 |
 | `frontend/app/features/workspace/api.server.ts` | Cookie・CSRFの転送、実APIの取得・更新、エラー処理 |
 | `frontend/app/features/workspace/command-form.tsx` | 保存中・成功・失敗・結果未確定、未保存の入力を残した移動の確認 |
-| `frontend/app/features/workspace/core-screens.tsx` | 車両・案件・記録・下書きの画面 |
-| `frontend/app/features/workspace/workflow-screens.tsx` | 写真、提出、訂正、回答、比較、共有、検証、出力の画面 |
-| `frontend/app/features/workspace/management-screens.tsx` | 顧客管理、提供側運用、画面一覧 |
+| `frontend/app/features/workspace/pages/` | 車両・案件・記録・下書きの機能別画面。`core-screens.tsx`は再exportのみ |
+| `frontend/app/features/workspace/workflow-*-pages.tsx` | 写真、提出、訂正、回答、比較、共有、検証、出力。`workflow-screens.tsx`は再exportのみ |
+| `frontend/app/features/workspace/preview-management/` | 企業設定、提供側運用、画面一覧。`management-screens.tsx`は再exportのみ |
+| `frontend/app/features/workspace/screens.ts`、`page-registry.tsx` | URL解決・可用性・ナビゲーションと、型で全画面を確認する描画定義 |
 | `frontend/app/features/workspace/preview-data.ts`、`preview-commands.ts` | 架空データとプレビュー内の操作。実APIの代替処理には使わない |
 | `frontend/app/routes/` | SSRのloader/action、ルートごとの認証と画面への受け渡し |
 
-Atomic Designの階層には固定していない。単純な部品はpropsとchildrenで組み合わせ、保存フォームはCommandForm・CommandSubmit・CommandFeedbackで状態を共有する。共通UIはFirebaseや個別の業務APIを呼び出さない。
+Atomic Designの責務に沿って部品・配置・機能画面を分ける。業務フォームと対象情報はfeatures内に置き、CommandForm・CommandSubmit・CommandFeedbackで保存状態を共有する。共通UIはFirebaseや個別の業務APIを呼び出さない。スタイルはCSS Modulesを使い、global CSSはreset・フォント・テーマ変数・アクセシビリティの基礎指定に限定する。Tailwindの依存とViteプラグインは削除した。
 
 React RouterはFramework Modeの既存構成を維持した。業務画面は`/app/*`、架空データの画面は`/preview/*`で、それぞれ同じ画面部品を使用する。具体的な画面の対応は`screens.ts`に定義している。
 
@@ -56,7 +61,19 @@ React RouterはFramework Modeの既存構成を維持した。業務画面は`/a
 
 案件が使用する構成版と、現在取得できる構成版が異なる場合は、古い案件を新しい設定で編集しない。現在は構成版をIDで取得するAPIがないため、その案件の項目編集・段階変更を停止して案内する。
 
-ホームの件数は取得した直近100件以内の値。一覧は20件ずつ表示する。案件作成の車両選択は取得した100件を使用し、車両詳細から移動した場合は選択した車両を別途取得する。大量データでの選択UIは後続の改善対象とする。
+車両・案件の一覧と、車両の関連案件、案件内記録、記録の版履歴はAPIのページ情報を保持する。案件作成の車両は検索とページ取得で選ぶ。表示中の版は履歴ページとは別に取得し、履歴に追加しない。履歴のページ変更でも選択した版を維持する。
+
+## 共通レイアウトと設定
+
+全画面の責務・分離先・接続範囲は[UI再構成の対応表](ui-migration.md)に記録する。新設の`/settings`からアカウント・所属・表示設定・自分の申請へ移動する。`/settings/display`はログインと共通の`mt_locale`・`mt_theme`を使う。システム管理へのリンクは、サーバーが検証した`session.system_admin`に基づいて表示する。
+
+管理画面では既存URLのqueryで一覧・詳細・作成・編集を分ける。`/app/*`と`/preview/*`の画面は同じ実装を使い、`/app/actions`は従来どおり保存を受け付ける。
+
+左上の開閉ボタンと右上の言語・テーマ切替を共通の操作領域に置く。サイト名ヘッダー、業務フッター、大きな画面名、飾りの英語見出しは表示しない。画面名は読み上げ用のh1とブラウザータイトルに残す。案件内では対象車両・ナンバー・状態・選択版を短く表示し、内部IDは詳細で参照する。
+
+デスクトップは通常のサイドバー、768px未満は同じグループを持つモーダルドロワーになる。モバイルは背景スクロールを止め、Escape・背景クリック・閉じるボタンに対応する。遷移成功時に閉じ、未保存の移動確認は開いているドロワー内でも操作できる。設定変更だけではフォームを作り直さない。
+
+日英のキー・引数の不足は型チェックとテストで検出する。APIのcodeとfieldを翻訳し、未知エラーには一般的な案内を表示する。日付は選択言語で整形し、タイムゾーンは`Asia/Tokyo`に固定する。テーマには意味別のCSS変数を使う。本文・入力・リンク・主操作の代表色は4.5:1以上、フォーカスはライトで3.28:1、ダークで8.31:1を確認した。ログインの固有スタイルは維持する。
 
 ## プレビューで確認する業務ルール
 
@@ -72,7 +89,7 @@ React RouterはFramework Modeの既存構成を維持した。業務画面は`/a
 
 表示状態の切替は読み込み中、データなし、通信失敗、権限不足、対象なし、保存競合、結果未確定に対応する。これらは表示確認用であり、実際のネットワーク障害や権限失効を再現した試験ではない。
 
-CSVは2列・100行以内のサンプルで行ごとの結果と確認操作を示す。完全なCSV解析・取込・重複防止、通知の配信、署名の本人確認、帳票のサーバー生成、ハッシュ計算・外部登録・照合は未実装。印刷・JSON取得はプレビュー内のサンプル出力に限定する。
+CSVは2列のサンプルを全行検査し、結果を20行ずつ表示する。完全なCSV解析・実取込・サーバーでの重複防止、通知の配信、署名の本人確認、帳票のサーバー生成、ハッシュ計算・外部登録・照合は未実装。印刷・JSON取得はプレビュー内のサンプル出力に限定する。
 
 ## 次のAPI連携Issue案
 
@@ -115,12 +132,17 @@ Playwrightでは全画面を幅360pxで巡回し、横スクロールと実行�
 | 車両 | `vehicles` | 実API |
 | 車両登録 | `vehicles/new` | 実API |
 | 車両詳細 | `vehicles/:vehicleId` | 実API |
+| 車両編集 | `vehicles/:vehicleId?view=edit` | 実API |
 | 識別情報・所有者履歴 | `vehicles/:vehicleId/history` | プレビュー |
 | 案件 | `cases` | 実API |
 | 案件作成 | `cases/new` | 実API |
 | 案件詳細 | `cases/:caseId` | 実API |
+| 案件内の記録一覧 | `cases/:caseId/records` | 実API |
+| 案件の関係者 | `cases/:caseId/participants` | プレビュー |
+| 案件管理 | `cases/:caseId/manage` | 実API。完了操作はプレビュー |
 | 記録の作成 | `cases/:caseId/records/new` | 実API |
-| 記録・版履歴 | `cases/:caseId/records/:recordId` | 実API |
+| 記録の内容 | `cases/:caseId/records/:recordId` | 実API |
+| 版履歴 | `cases/:caseId/records/:recordId/history` | 実API |
 | 下書き編集 | `cases/:caseId/records/:recordId/edit` | 実API |
 | 撮影・点検 | `cases/:caseId/records/:recordId/photos` | プレビュー |
 | 提出前確認 | `cases/:caseId/records/:recordId/submit` | プレビュー |

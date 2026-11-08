@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { useTranslation } from "../../components/ui/display-settings";
+import styles from "./workspace.module.css";
 
 export function RouteTabs({
   label,
@@ -10,16 +10,15 @@ export function RouteTabs({
   items: { to: string; label: string }[];
   activeTo: string;
 }) {
-  const t = useTranslation();
   return (
-    <nav className="workspace-tabs" aria-label={t(label)}>
+    <nav className={styles["workspace-tabs"]} aria-label={label}>
       {items.map((item) => (
         <Link
           key={item.to}
           to={item.to}
           aria-current={item.to === activeTo ? "page" : undefined}
         >
-          {t(item.label)}
+          {item.label}
         </Link>
       ))}
     </nav>

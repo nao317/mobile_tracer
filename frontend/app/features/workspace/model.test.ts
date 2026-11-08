@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { entriesFromForm, rulesFor } from "./model";
+import { entriesFromForm, paginationSchema, rulesFor } from "./model";
 import { createPreviewData, demoCaseIds, demoId } from "./preview-data";
 import { executePreview } from "./preview-commands";
 
@@ -9,6 +9,22 @@ function form(values: Record<string, string>) {
   for (const [key, value] of Object.entries(values)) form.set(key, value);
   return form;
 }
+describe("pagination metadata", () => {
+  it("preserves an empty page and the API page size", () => {
+    expect(paginationSchema.parse({ page: 2, page_size: 20, total: 0 }))
+      .toEqual({ page: 2, page_size: 20, total: 0 });
+  });
+  it.each([
+    { page: 0, page_size: 20, total: 0 },
+    { page: 1.5, page_size: 20, total: 1 },
+    { page: 1, page_size: 0, total: 1 },
+    { page: 1, page_size: 101, total: 1 },
+    { page: 1, page_size: 20, total: -1 },
+    { page: 1, page_size: 20, total: 1.5 },
+  ])("rejects invalid API metadata %j", (value) => {
+    expect(paginationSchema.safeParse(value).success).toBe(false);
+  });
+});
 describe("draft entries", () => {
   it("preserves untouched fields and distinguishes false, zero, null and explicit removal", () => {
     const rules = {

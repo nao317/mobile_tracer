@@ -33,12 +33,14 @@ export default defineConfig({
               {
                 command: "node e2e/fixtures/auth-api.mjs",
                 url: `${authFixtureURL}/health`,
+                reuseExistingServer: !process.env.CI,
               },
             ]
           : []),
         {
           command: "npm run build && npm run start",
           url: "http://127.0.0.1:4173",
+          reuseExistingServer: !process.env.CI,
           env: {
             HOST: "127.0.0.1",
             PORT: "4173",

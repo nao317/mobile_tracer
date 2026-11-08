@@ -1,4 +1,4 @@
-import { data, isRouteErrorResponse, Link } from "react-router";
+import { data, isRouteErrorResponse, Link, useRouteLoaderData } from "react-router";
 import type { Route } from "./+types/workspace";
 import {
   loadWorkspace,
@@ -9,13 +9,18 @@ import { WorkspaceView } from "../features/workspace/workspace-view";
 import { EmptyState, Panel } from "../components/ui/primitives";
 import { sessionHeaders } from "../lib/auth.server";
 import {
-  BrandMark,
-  useDisplaySettings,
+  useTranslation,
 } from "../components/ui/display-settings";
+import { AuthenticatedLayout } from "../components/templates/authenticated-layout";
+import { settingsNavigation } from "../features/settings/navigation";
+import type { loader as rootLoader } from "../root";
+import styles from "../components/ui/ui.module.css";
+import { screenTitle } from "../i18n";
+import { routeLocale } from "../i18n/route-locale";
 
 export const headers = sessionHeaders;
-export function meta() {
-  return [{ title: "ワークスペース | Mobile Tracer" }];
+export function meta({ matches, loaderData }: Route.MetaArgs) {
+  return [{ title: `${screenTitle(routeLocale(matches), loaderData && "screen" in loaderData ? loaderData.screen.key : "dashboard")} | Mobile Tracer` }];
 }
 export async function loader({ request, params }: Route.LoaderArgs) {
   const path = params["*"] ?? "";
@@ -42,57 +47,39 @@ export async function action({ request }: Route.ActionArgs) {
   return mutateWorkspace(request);
 }
 export default function Workspace({ loaderData }: Route.ComponentProps) {
-  const { language } = useDisplaySettings();
+  const t = useTranslation();
+  const root = useRouteLoaderData<typeof rootLoader>("root");
   if ("guest" in loaderData)
     return (
-      <div className="workspace">
-        <header className="landing-header">
-          <Link to="/app" className="workspace-logo">
-            <BrandMark />
-          </Link>
-        </header>
-        <main className="management-main ui-stack">
-          <h1 className="dashboard-title">
-            {language === "ja" ? "ダッシュボード" : "Dashboard"}
-          </h1>
+      <AuthenticatedLayout session={root?.session} groups={settingsNavigation(t, root?.session)} title={t("navigation.home")}>
           <Panel
-            title={
-              language === "ja" ? "データがありません" : "No data available"
-            }
+            title={t("entry.noData")}
           >
             <p>
-              {loaderData.needsMembership
-                ? language === "ja"
-                  ? "業務データを表示するには、アカウント画面で所属を選択してください。"
-                  : "Select a company in your account to view business data."
-                : language === "ja"
-                  ? "データを表示するには、ログインまたは新規登録が必要です。"
-                  : "Sign in or create an account to view your data."}
+              {t(loaderData.needsMembership ? "entry.selectCompany" : "entry.signInRequired")}
             </p>
-            <div className="ui-actions">
+            <div className={styles["ui-actions"]}>
               {loaderData.needsMembership ? (
-                <Link className="ui-link-button" to="/account">
-                  {language === "ja"
-                    ? "アカウント・所属を確認"
-                    : "View account and companies"}
+                <Link className={styles["ui-link-button"]} to="/account">
+                  {t("entry.account")}
                 </Link>
               ) : (
                 <>
-                  <Link className="ui-link-button" to="/login">
-                    {language === "ja" ? "ログイン" : "Sign in"}
+                  <Link className={styles["ui-link-button"]} to="/login">
+                    {t("entry.signIn")}
                   </Link>
                   <Link
-                    className="ui-button ui-button--secondary"
+                    className={`${styles["ui-button"]} ${styles["ui-button--secondary"]}`}
                     to="/login?mode=register"
                   >
-                    {language === "ja" ? "新規登録" : "Sign up"}
+                    {t("entry.register")}
                   </Link>
                 </>
               )}
             </div>
           </Panel>
-        </main>
-      </div>
+          {root?.session && <Link to="/settings">{t("navigation.settings")}</Link>}
+      </AuthenticatedLayout>
     );
   return (
     <WorkspaceProvider
@@ -110,34 +97,36 @@ export default function Workspace({ loaderData }: Route.ComponentProps) {
   );
 }
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const t = useTranslation();
+  const root = useRouteLoaderData<typeof rootLoader>("root");
   const status = isRouteErrorResponse(error) ? error.status : 503;
   return (
-    <main className="ui-standalone ui-stack">
+    <AuthenticatedLayout session={root?.session} groups={settingsNavigation(t, root?.session)}>
       <Panel>
         <EmptyState
           title={
             status === 404
-              ? "対象が見つかりません"
+              ? t("error.notFound")
               : status === 403
-                ? "表示する権限がありません"
+                ? t("error.forbidden")
                 : status === 400
-                  ? "入力・検索条件を確認してください"
-                  : "情報を取得できませんでした"
+                  ? t("entry.invalid")
+                  : t("error.retry")
           }
           actions={
             <>
-              <Link className="ui-link-button" to="/app">
-                ホームへ戻る
+              <Link className={styles["ui-link-button"]} to="/app">
+                {t("entry.home")}
               </Link>
-              <Link className="ui-text-link" to="/account">
-                所属を確認する
+              <Link className={styles["ui-text-link"]} to="/account">
+                {t("entry.company")}
               </Link>
             </>
           }
         >
-          接続状態と所属を確認し、もう一度お試しください。
+          {t("entry.connection")}
         </EmptyState>
       </Panel>
-    </main>
+    </AuthenticatedLayout>
   );
 }

@@ -1,236 +1,57 @@
-import {
-  CarFront,
-  ClipboardList,
-  LayoutDashboard,
-  ListChecks,
-  Settings,
-  ShieldCheck,
-  Layers,
-  ArrowUpRight,
-} from "lucide-react";
-import { Link, NavLink, useNavigation, useSearchParams } from "react-router";
 import type { ReactNode } from "react";
-import {
-  Alert,
-  Badge,
-  Button,
-  EmptyState,
-  Select,
-} from "../../components/ui/primitives";
-import { roleLabels, type Role } from "./model";
+import { useRouteLoaderData, useSearchParams } from "react-router";
+import { AuthenticatedLayout } from "../../components/templates/authenticated-layout";
+import { useTranslation, useI18n } from "../../components/ui/display-settings";
+import { Alert, Button, EmptyState, Select } from "../../components/ui/primitives";
+import { settingsNavigation } from "../settings/navigation";
+import type { loader as rootLoader } from "../../root";
 import { useWorkspace } from "./workspace-context";
-import {
-  BrandMark,
-  useTranslation,
-} from "../../components/ui/display-settings";
-import type { Screen } from "./screens";
+import { workspaceNavigation, type Screen } from "./screens";
+import { roleLabels, type Role } from "./model";
+import styles from "./workspace-shell.module.css";
 
-const navigation = [
-  { path: "", label: "ホーム", icon: LayoutDashboard },
-  { path: "tasks", label: "未対応一覧", icon: ListChecks },
-  { path: "vehicles", label: "車両", icon: CarFront },
-  { path: "cases", label: "案件", icon: ClipboardList },
-  { path: "settings/organization", label: "顧客管理", icon: Settings },
-  { path: "operations/status", label: "提供側運用", icon: ShieldCheck },
-];
-export function WorkspaceShell({
-  children,
-  screen,
-}: {
-  children: ReactNode;
-  screen: Screen;
-}) {
-  const { base, mode, email, snapshot, reset, changeRole, previewAvailable } =
-    useWorkspace();
-  const pending = useNavigation().state !== "idle";
-  const [search, setSearch] = useSearchParams();
-  const scenario = search.get("scenario") ?? "normal";
+export function WorkspaceShell({ children, screen }: { children: ReactNode; screen: Screen }) {
+  const { base, mode, snapshot, reset, changeRole } = useWorkspace();
+  const root = useRouteLoaderData<typeof rootLoader>("root");
   const t = useTranslation();
-  return (
-    <div className="workspace">
-      <a href="#workspace-main" className="ui-skip">
-        {t("本文へ移動")}
-      </a>
-      <aside className="workspace-sidebar">
-        <Link to={base} className="workspace-logo" translate="no">
-          <BrandMark />
-        </Link>
-        <div className="workspace-tenant">
-          <span className="workspace-tenant-icon">M</span>
-          <div>
-            <strong>
-              {t(mode === "preview" ? "サンプル企業" : "業務ワークスペース")}
-            </strong>
-            <span>{snapshot.context.stores.length}店舗</span>
-          </div>
-        </div>
-        <p className="workspace-nav-label">{t("ワークスペース")}</p>
-        <nav aria-label={t("メインナビゲーション")}>
-          {navigation.map(({ path, label, icon: Icon }) => (
-            <NavLink key={path} to={`${base}/${path}`} end={!path}>
-              <Icon size={18} aria-hidden="true" />
-              {t(label)}
-            </NavLink>
-          ))}
-        </nav>
-        {mode === "preview" && (
-          <NavLink className="workspace-catalog" to={`${base}/screens`}>
-            <Layers size={18} aria-hidden="true" />
-            {t("全画面を確認")}
-          </NavLink>
-        )}
-        <div className="workspace-sidebar-footer">
-          <Badge tone={mode === "preview" ? "warning" : "info"}>
-            {t(mode === "preview" ? "UIプレビュー" : "業務環境")}
-          </Badge>
-          <Link to="/account">
-            {t("アカウント")} <ArrowUpRight size={14} aria-hidden="true" />
-          </Link>
-        </div>
-      </aside>
-      <div className="workspace-body">
-        <header className="workspace-topbar">
-          <div className="workspace-breadcrumb">
-            {t("ワークスペース")} <span>/</span>{" "}
-            <strong>{t(screen.title)}</strong>
-          </div>
-          <div className="workspace-person">
-            <span className="workspace-avatar">M</span>
-            <span>{email}</span>
-          </div>
-        </header>
-        {mode === "preview" && (
-          <div className="workspace-preview-bar">
-            <strong>架空データのプレビュー</strong>
-            <span>
-              変更はこの画面内のみ。再読み込みすると初期状態に戻ります。
-            </span>
-            <label>
-              役割
-              <Select
-                aria-label="プレビューの役割"
-                value={snapshot.context.principal.roles[0]?.role}
-                onChange={(event) => changeRole?.(event.target.value as Role)}
-              >
-                {Object.entries(roleLabels).map(([role, label]) => (
-                  <option value={role} key={role}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label>
-              表示状態
-              <Select
-                aria-label="表示状態"
-                value={scenario}
-                onChange={(event) => {
-                  const next = new URLSearchParams(search);
-                  if (event.target.value === "normal") next.delete("scenario");
-                  else next.set("scenario", event.target.value);
-                  setSearch(next);
-                }}
-              >
-                {Object.entries({
-                  normal: "通常",
-                  loading: "読み込み中",
-                  empty: "データなし",
-                  error: "通信失敗",
-                  forbidden: "権限不足",
-                  "not-found": "対象なし",
-                  conflict: "保存競合",
-                  unknown: "保存結果未確定",
-                }).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <Button variant="ghost" onClick={() => reset?.()}>
-              初期状態に戻す
-            </Button>
-          </div>
-        )}
-        <div className="workspace-loading" role="status" aria-live="polite">
-          {pending ? "読み込み中…" : ""}
-        </div>
-        <main
-          id="workspace-main"
-          className="workspace-main ui-stack"
-          tabIndex={-1}
-          aria-busy={pending}
-        >
-          {snapshot.notice && <Alert tone="warning">{snapshot.notice}</Alert>}
-          <ScenarioBoundary scenario={mode === "preview" ? scenario : "normal"}>
-            {children}
-          </ScenarioBoundary>
-          {mode === "live" && previewAvailable && (
-            <p className="ui-muted">
-              <Link className="ui-text-link" to="/preview/screens">
-                開発用の画面プレビューを開く
-              </Link>
-            </p>
-          )}
-        </main>
-        <footer className="workspace-footer">
-          <BrandMark />
-          <span>車両の記録を、次の確認へ。</span>
-        </footer>
+  const { enumLabel, screenTitle } = useI18n();
+  const [search, setSearch] = useSearchParams();
+  const scenario = mode === "preview" ? search.get("scenario") ?? "normal" : "normal";
+  const business = workspaceNavigation({ base, mode, context: snapshot.context, caseId: screen.params.caseId, recordId: screen.params.recordId }, t).map(group => ({ ...group, items: group.items.map(item => {
+    if (!screen.params.caseId || !item.to.startsWith(`${base}/cases/${screen.params.caseId}`)) return item;
+    const query = new URLSearchParams();
+    for (const key of ["version", "returnTo"]) {
+      const value = search.get(key);
+      if (value) query.set(key, value);
+    }
+    return { ...item, to: `${item.to}${query.size ? `?${query}` : ""}` };
+  }) }));
+  const common = settingsNavigation(t, root?.session).filter(group => !["home", "vehicles", "cases"].includes(group.id));
+  const grouped = new Map(business.map(group => [group.id, { ...group, items: [...group.items] }]));
+  for (const group of common) {
+    const existing = grouped.get(group.id);
+    if (existing) existing.items.push(...group.items.filter(item => !existing.items.some(link => link.to === item.to)));
+    else grouped.set(group.id, group);
+  }
+  const groups = [...grouped.values()];
+  return <AuthenticatedLayout groups={groups} session={root?.session} title={screenTitle(screen.key)}>
+    {mode === "preview" && <details className={styles.preview}><summary>{t("navigation.preview")}</summary>
+      <p>{t("entry.previewNotice")}</p>
+      <div className={styles.controls}>
+        <label>{t("entry.previewRole")}<Select aria-label={t("entry.previewRole")} value={snapshot.context.principal.roles[0]?.role} onChange={event => changeRole?.(event.target.value as Role)}>{Object.keys(roleLabels).map(role => <option value={role} key={role}>{enumLabel("role", role)}</option>)}</Select></label>
+        <label>{t("navigation.scenario")}<Select aria-label={t("navigation.scenario")} value={scenario} onChange={event => { const next = new URLSearchParams(search); if (event.target.value === "normal") next.delete("scenario"); else next.set("scenario", event.target.value); setSearch(next); }}>{["normal", "loading", "empty", "error", "forbidden", "not-found", "conflict", "unknown"].map(value => <option key={value} value={value}>{enumLabel("scenario", value)}</option>)}</Select></label>
+        <Button variant="ghost" onClick={() => reset?.()}>{t("navigation.reset")}</Button>
       </div>
-    </div>
-  );
+    </details>}
+    {snapshot.notice && <Alert tone="warning">{t("error.configurationMismatch")}</Alert>}
+    <ScenarioBoundary scenario={scenario}>{children}</ScenarioBoundary>
+  </AuthenticatedLayout>;
 }
-function ScenarioBoundary({
-  scenario,
-  children,
-}: {
-  scenario: string;
-  children: ReactNode;
-}) {
-  if (scenario === "loading")
-    return (
-      <section aria-busy="true" className="ui-stack">
-        <Alert>情報を読み込んでいます…</Alert>
-        <div className="workspace-skeleton" />
-      </section>
-    );
-  if (scenario === "empty")
-    return (
-      <EmptyState title="表示するデータがありません">
-        条件を変更するか、新しい記録を作成してください。
-      </EmptyState>
-    );
-  if (scenario === "forbidden")
-    return (
-      <EmptyState title="表示する権限がありません">
-        所属と担当範囲を確認してください。
-      </EmptyState>
-    );
-  if (scenario === "not-found")
-    return (
-      <EmptyState title="対象が見つかりません">
-        一覧へ戻り、対象を選び直してください。
-      </EmptyState>
-    );
-  return (
-    <>
-      {scenario === "error" && (
-        <Alert tone="danger">
-          通信に失敗しました。入力内容はこの画面に残っています。接続を確認してください。
-        </Alert>
-      )}
-      {scenario === "conflict" && (
-        <Alert tone="warning">
-          別の更新が保存されています。入力を控え、最新の版との差分を確認してから再編集してください。
-        </Alert>
-      )}
-      {scenario === "unknown" && (
-        <Alert tone="warning">
-          保存結果が未確定です。一覧・詳細で結果を確認してから再操作してください。
-        </Alert>
-      )}
-      {children}
-    </>
-  );
+function ScenarioBoundary({ scenario, children }: { scenario: string; children: ReactNode }) {
+  const t = useTranslation();
+  if (scenario === "loading") return <div aria-busy="true"><Alert>{t("navigation.loading")}</Alert></div>;
+  if (scenario === "empty") return <EmptyState title={t("error.empty")} />;
+  if (scenario === "forbidden") return <EmptyState title={t("error.forbidden")} />;
+  if (scenario === "not-found") return <EmptyState title={t("error.notFound")} />;
+  return <>{["error", "conflict", "unknown"].includes(scenario) && <Alert tone={scenario === "error" ? "danger" : "warning"}>{t(scenario === "conflict" ? "error.conflict" : scenario === "unknown" ? "error.uncertain" : "error.retry")}</Alert>}{children}</>;
 }

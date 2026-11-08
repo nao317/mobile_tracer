@@ -104,9 +104,9 @@ export const versionSchema = z.object({
   ),
 });
 export const paginationSchema = z.object({
-  page: z.number().int(),
-  page_size: z.number().int(),
-  total: z.number().int(),
+  page: z.number().int().positive(),
+  page_size: z.number().int().positive().max(100),
+  total: z.number().int().nonnegative(),
 });
 export type BusinessContext = z.infer<typeof contextSchema>;
 export type Vehicle = z.infer<typeof vehicleSchema>;
@@ -186,12 +186,23 @@ export type WorkspaceData = {
   vehicles: Vehicle[];
   cases: BusinessCase[];
   records: RecordItem[];
+  /** Current history page; the viewed/edited version is selected separately. */
   versions: Version[];
+  /** Top-level list, including the vehicle search on the case creation screen. */
   pagination?: Pagination;
+  vehiclesPagination?: Pagination;
+  casesPagination?: Pagination;
+  relatedPagination?: Pagination;
+  recordsPagination?: Pagination;
+  historyPagination?: Pagination;
+  selectedVehicle?: Vehicle | null;
+  selectedVersion?: Version | null;
   workflow: Workflow | null;
   notice?: string;
 };
 export type CommandResult = {
+  /** Stable result identifier for localization; existing messages remain available. */
+  code?: string;
   error?: string;
   fields?: Record<string, string[]>;
   message?: string;

@@ -101,6 +101,7 @@ export type CompanyProfile = z.infer<typeof profileSchema>;
 export type ManagementRequest = z.infer<typeof managementRequestSchema>;
 export type Member = z.infer<typeof memberSchema>;
 export type ManagementResult = {
+  code?: string;
   error?: string;
   fields?: Record<string, string[]>;
   message?: string;
@@ -113,3 +114,7 @@ export function managementRevalidate({
 }: ShouldRevalidateFunctionArgs) {
   return actionStatus && actionStatus >= 400 ? false : defaultShouldRevalidate;
 }
+
+export type UsersPage = z.infer<typeof usersPageSchema>;
+export type CompaniesPage = z.infer<typeof companiesPageSchema>;
+export type RequestsPage = z.infer<typeof requestsPageSchema>;

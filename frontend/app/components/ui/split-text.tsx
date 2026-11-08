@@ -536,7 +536,7 @@ const SplitText = ({
       id={id}
       translate="no"
       ref={ref}
-      className={`split-parent ${className}`}
+      className={className}
       style={{
         textAlign,
         overflow: clip ? "hidden" : "visible",

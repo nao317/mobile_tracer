@@ -6,7 +6,7 @@ import {
   type AuthContext,
 } from "../../lib/auth.server";
 import { idSchema } from "../workspace/model";
-import type { ManagementResult } from "./model";
+import { requestsPageSchema, type ManagementRequest, type ManagementResult } from "./model";
 
 export async function managementSession(request: Request, admin = false) {
   const auth = await requireSession(request);
@@ -81,6 +81,7 @@ export async function managementWrite(
       {
         error:
           "処理結果が未確定です。申請一覧・管理画面で結果を確認してから再操作してください。",
+        code: "result_unknown",
         uncertain: true,
       },
       { status: 503, headers: auth.headers },
@@ -105,6 +106,7 @@ export async function managementWrite(
         error: error.success
           ? error.data.error.message
           : "処理できませんでした。結果を確認してください。",
+        code: error.success ? error.data.error.code : "request_failed",
         fields: error.success ? error.data.error.fields : undefined,
         uncertain: response.status >= 500,
       },
@@ -119,6 +121,7 @@ export async function managementWrite(
       {
         error:
           "処理結果を確認できませんでした。申請一覧・管理画面で結果を確認してください。",
+        code: "result_unknown",
         uncertain: true,
       },
       { status: 502, headers: auth.headers },
@@ -161,4 +164,47 @@ export function companyForm(form: FormData) {
         .filter((v): v is string => typeof v === "string"),
     },
   };
+}
+
+// The API exposes request collections only. Resolve details independently of
+// list filters so a reviewed request remains available after its status changes.
+export async function managementRequestDetail(
+  request: Request,
+  auth: AuthContext,
+  path: "/api/admin/requests" | "/api/me/requests",
+  id: string,
+) {
+  validID(id);
+  for (let page = 1; ; page++) {
+    const result = await managementRead(request, auth, `${path}?page=${page}&page_size=100`, requestsPageSchema);
+    const item = result.data.find((item) => item.id === id);
+    if (item) return item;
+    if (page * result.pagination.page_size >= result.pagination.total || !result.data.length)
+      throw new Response("対象が見つかりません。", { status: 404, headers: auth.headers });
+  }
+}
+
+export async function pendingOwnRequests(request: Request, auth: AuthContext) {
+  const pending: ManagementRequest[] = [];
+  for (let page = 1; ; page++) {
+    const result = await managementRead(request, auth, `/api/me/requests?status=pending&page=${page}&page_size=100`, requestsPageSchema);
+    pending.push(...result.data);
+    if (page * result.pagination.page_size >= result.pagination.total || !result.data.length) return pending;
+  }
+}
+
+export async function managementReadPage<T extends { data: unknown[]; pagination: { page: number; page_size: number; total: number } }>(
+  request: Request,
+  auth: AuthContext,
+  path: string,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const url = new URL(path, "https://management.invalid");
+  const requestedPage = Number(url.searchParams.get("page") || "1");
+  if (!Number.isSafeInteger(requestedPage) || requestedPage < 1) url.searchParams.set("page", "1");
+  const result = await managementRead(request, auth, `${url.pathname}${url.search}`, schema);
+  const lastPage = Math.max(1, Math.ceil(result.pagination.total / result.pagination.page_size));
+  if (result.pagination.page <= lastPage) return result;
+  url.searchParams.set("page", String(lastPage));
+  return managementRead(request, auth, `${url.pathname}${url.search}`, schema);
 }

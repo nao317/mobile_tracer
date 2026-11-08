@@ -9,9 +9,6 @@ test("the home page redirects guests to the dashboard with sign-in options", asy
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole("main")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "ダッシュボード" }),
-  ).toBeVisible();
-  await expect(
     page.getByText("データを表示するには、ログインまたは新規登録が必要です。"),
   ).toBeVisible();
   await expect(
@@ -28,13 +25,13 @@ test("guest dashboard display preferences persist", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "English" }).click();
   await expect(
-    page.getByRole("heading", { name: "Dashboard", level: 1 }),
+    page.getByRole("navigation", { name: "Main navigation" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Switch to dark theme" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Dashboard", level: 1 }),
+    page.getByRole("navigation", { name: "Main navigation" }),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
@@ -53,10 +50,10 @@ test("display preferences work on workspace screens", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("button", { name: "Switch to dark theme" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page.getByLabel("Search", { exact: true })).toHaveCSS(
-    "background-color",
-    "rgb(255, 255, 255)",
+  const darkInput = await page.getByLabel("Search", { exact: true }).evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
   );
+  expect(darkInput).not.toBe("rgb(255, 255, 255)");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -95,7 +92,7 @@ test("an unknown URL displays the 404 page", async ({ page }) => {
   expect(response?.status()).toBe(404);
   await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
   await expect(
-    page.getByText("The requested page could not be found."),
+    page.getByText("対象が見つかりません。"),
   ).toBeVisible();
 });
 

@@ -3,6 +3,8 @@ import type { Route } from "./+types/login";
 import { firebaseConfig, sessionHeaders } from "../lib/auth.server";
 import { LoginView } from "../features/auth/login-view";
 import type { Language, Theme } from "../features/auth/messages";
+import { createTranslator } from "../i18n";
+import { routeLocale } from "../i18n/route-locale";
 export { LoginView } from "../features/auth/login-view";
 
 export const headers = sessionHeaders;
@@ -10,8 +12,8 @@ const errors: Record<string, string> = {
   cancelled: "ログインがキャンセルされました。",
   unavailable: "現在ログインを利用できません。",
 };
-export function meta() {
-  return [{ title: "ログイン | Mobile Tracer" }];
+export function meta({ matches }: Route.MetaArgs) {
+  return [{ title: `${createTranslator(routeLocale(matches))("entry.signIn")} | Mobile Tracer` }];
 }
 export async function loader({ request }: Route.LoaderArgs) {
   const initialLanguage: Language = /(?:^|;\s*)mt_locale=en(?:;|$)/.test(

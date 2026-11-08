@@ -4,9 +4,9 @@ test("login card groups controls and aligns their widths", async ({ page }) => {
   await requireEnabledAuth(page);
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto("/login");
-  const card = page.locator(".login-card"),
+  const card = page.locator('[class*="login-card"]'),
     tabs = page.getByRole("tablist");
-  const email = page.locator(".login-input-frame").first();
+  const email = page.getByLabel("メールアドレス").locator("..");
   const login = page.getByRole("button", { name: "ログイン", exact: true });
   const google = page.getByRole("button", {
     name: "Googleでログイン",
@@ -24,11 +24,11 @@ test("login card groups controls and aligns their widths", async ({ page }) => {
   expect(tabsBox!.width).toBeLessThan(inputBox!.width);
   const [labelFont, titleFont, bodyFont] = await Promise.all([
     page
-      .locator(".login-label")
+      .locator('label[for="login-email"]')
       .first()
       .evaluate((el) => getComputedStyle(el).fontFamily),
     page
-      .locator(".login-brand")
+      .locator("#login-title")
       .evaluate((el) => getComputedStyle(el).fontFamily),
     page.locator("body").evaluate((el) => getComputedStyle(el).fontFamily),
   ]);
@@ -51,11 +51,11 @@ test("login title animates by character and respects reduced motion", async ({
   await page.goto("/login");
   const title = page.getByRole("heading", { name: "Mobile Tracer", level: 1 });
   await expect(title).toBeVisible();
-  await expect(title.locator(".split-char")).toHaveCount(12);
+  await expect(title.locator('[class*="split-char"]')).toHaveCount(12);
   await expect
     .poll(async () =>
       title
-        .locator(".split-char")
+        .locator('[class*="split-char"]')
         .last()
         .evaluate((el) => Number(getComputedStyle(el).opacity)),
     )
@@ -63,7 +63,7 @@ test("login title animates by character and respects reduced motion", async ({
   await expect
     .poll(async () =>
       title
-        .locator(".split-char")
+        .locator('[class*="split-char"]')
         .last()
         .evaluate((el) => Number(getComputedStyle(el).opacity)),
     )
@@ -71,7 +71,7 @@ test("login title animates by character and respects reduced motion", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload();
   await expect(title).toBeVisible();
-  await expect(title.locator(".split-char")).toHaveCount(0);
+  await expect(title.locator('[class*="split-char"]')).toHaveCount(0);
 });
 
 async function requireEnabledAuth(page: Page) {

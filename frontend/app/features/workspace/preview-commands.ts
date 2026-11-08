@@ -30,9 +30,13 @@ export function executePreview(
       (!record || v.record_id === record.id) &&
       (!item || v.case_id === item.id),
   );
-  const fail = (error: string, fields?: Record<string, string[]>) => ({
+  const fail = (
+    code: string,
+    error: string,
+    fields?: Record<string, string[]>,
+  ) => ({
     snapshot: source,
-    result: { error, fields },
+    result: { code, error, fields },
   });
   const isRecipientAnswer = intent === "answer";
   const adminCommands = [
@@ -52,12 +56,12 @@ export function executePreview(
     adminCommands.includes(intent) &&
     !canManage(snapshot.context, item?.store_id)
   )
-    return fail("この操作を行う権限がありません。");
+    return fail("forbidden", "この操作を行う権限がありません。");
   if (
     ["createVehicle", "updateVehicle"].includes(intent) &&
     !isTenantAdmin(snapshot.context)
   )
-    return fail("車両の登録・更新には企業管理者の権限が必要です。");
+    return fail("vehicle_admin_required", "車両の登録・更新には企業管理者の権限が必要です。");
   if (
     item &&
     !isRecipientAnswer &&
@@ -73,6 +77,7 @@ export function executePreview(
     !canWrite(snapshot.context, item)
   )
     return fail(
+      "case_not_writable",
       "この案件を変更する権限がありません。完了・中止済みの案件は編集できません。",
     );
   let redirectTo: string | undefined;
@@ -81,7 +86,7 @@ export function executePreview(
       value(form, "model_name").length > 200 ||
       value(form, "identifier").length > 100
     )
-      return fail("車種名・識別情報の文字数を確認してください。");
+      return fail("vehicle_input_too_long", "車種名・識別情報の文字数を確認してください。");
     const id = newId(),
       identifier = value(form, "identifier");
     if (
@@ -90,7 +95,7 @@ export function executePreview(
         v.identifiers.some((i) => i.value === identifier),
       )
     )
-      return fail("同じ識別情報の車両があります。重複候補を確認してください。");
+      return fail("duplicate_identifier", "同じ識別情報の車両があります。重複候補を確認してください。");
     snapshot.vehicles.unshift({
       id,
       model_name: value(form, "model_name") || null,
@@ -113,19 +118,19 @@ export function executePreview(
     const vehicle = snapshot.vehicles.find(
       (v) => v.id === value(form, "vehicleId"),
     );
-    if (!vehicle) return fail("車両が見つかりません。");
+    if (!vehicle) return fail("vehicle_not_found", "車両が見つかりません。");
     vehicle.model_name = value(form, "model_name") || null;
   } else if (intent === "createCase") {
     if (!canWrite(snapshot.context))
-      return fail("案件を作成する権限がありません。");
+      return fail("forbidden", "案件を作成する権限がありません。");
     const type = value(form, "case_type");
     if (type !== "rental" && type !== "dealer" && type !== "repair")
-      return fail("業態を選択してください。");
+      return fail("business_type_required", "業態を選択してください。");
     if (
       !snapshot.vehicles.some((v) => v.id === value(form, "vehicle_id")) ||
       !snapshot.context.stores.some((s) => s.id === value(form, "store_id"))
     )
-      return fail("店舗と車両を選択してください。");
+      return fail("case_selection_required", "店舗と車両を選択してください。");
     const config = snapshot.context.configuration!;
     const id = newId();
     snapshot.cases.unshift({
@@ -144,13 +149,13 @@ export function executePreview(
     });
     redirectTo = `cases/${id}`;
   } else if (intent === "createRecord" || intent === "updateDraft") {
-    if (!item) return fail("案件が見つかりません。");
+    if (!item) return fail("case_not_found", "案件が見つかりません。");
     const kind =
       intent === "createRecord"
         ? value(form, "record_kind")
         : (record?.record_kind ?? "");
     const fields = rulesFor(snapshot, item)?.record_kinds[kind]?.fields;
-    if (!fields) return fail("この案件で利用できる記録種別を選んでください。");
+    if (!fields) return fail("invalid_record_kind", "この案件で利用できる記録種別を選んでください。");
     if (
       intent === "updateDraft" &&
       (!version ||
@@ -158,11 +163,12 @@ export function executePreview(
         version.lock_version !== Number(value(form, "lock_version")))
     )
       return fail(
+        "version_conflict",
         "別の更新が保存されています。入力を控えてから最新の版を開き、差分を確認してください。",
       );
     const parsed = entriesFromForm(form, fields, version?.entries);
     if (Object.keys(parsed.fields).length)
-      return fail("入力内容を確認してください。", parsed.fields);
+      return fail("validation_error", "入力内容を確認してください。", parsed.fields);
     if (intent === "createRecord") {
       const id = newId();
       snapshot.records.unshift({
@@ -194,7 +200,7 @@ export function executePreview(
   } else if (intent === "updateCase" && item) {
     const rules = rulesFor(snapshot, item);
     if (!rules?.transitions[item.stage]?.includes(value(form, "stage")))
-      return fail("許可されていない段階移行です。");
+      return fail("invalid_transition", "許可されていない段階移行です。");
     if (item.case_type === "repair" && value(form, "stage") === "work") {
       const latest = snapshot.versions
         .filter((v) => v.case_id === item.id && v.status === "submitted")
@@ -208,7 +214,7 @@ export function executePreview(
             a.response === "承認",
         )
       )
-        return fail("最新の見積・作業範囲に対する作業承認が必要です。");
+        return fail("work_approval_required", "最新の見積・作業範囲に対する作業承認が必要です。");
     }
     item.stage = value(form, "stage");
   } else if (intent === "assignCase" && item) {
@@ -218,9 +224,9 @@ export function executePreview(
         : null;
   } else if (intent === "cancelCase" && item) {
     if (!canManage(snapshot.context, item.store_id))
-      return fail("案件を中止する権限がありません。");
+      return fail("forbidden", "案件を中止する権限がありません。");
     if (!value(form, "reason").trim())
-      return fail("中止理由を入力してください。", {
+      return fail("cancellation_reason_required", "中止理由を入力してください。", {
         reason: ["中止理由を入力してください。"],
       });
     item.status = "cancelled";
@@ -229,7 +235,7 @@ export function executePreview(
     item.status = "completed";
   } else if (intent === "submitRecord" && item && record && version) {
     if (version.status !== "draft")
-      return fail("提出済みです。訂正は新しい版を作成してください。");
+      return fail("version_not_editable", "提出済みです。訂正は新しい版を作成してください。");
     const fields =
       rulesFor(snapshot, item)?.record_kinds[record.record_kind]?.fields ?? {};
     const missing = Object.entries(fields).filter(
@@ -241,6 +247,7 @@ export function executePreview(
     );
     if (missing.length)
       return fail(
+        "required_fields_missing",
         `必須項目が未入力です：${missing.map(([key]) => key).join("、")}`,
       );
     const photos = workflow.photos.filter((p) => p.versionId === version.id);
@@ -255,6 +262,7 @@ export function executePreview(
       )
     )
       return fail(
+        "photos_incomplete",
         "未完了の撮影箇所があります。撮影または責任者の例外承認を完了してください。",
       );
     version.status = "submitted";
@@ -263,7 +271,7 @@ export function executePreview(
     redirectTo = `cases/${item.id}/records/${record.id}?version=${version.id}`;
   } else if (intent === "correctRecord" && item && record && version) {
     if (version.status !== "submitted" || !value(form, "reason").trim())
-      return fail("提出版と訂正・補足の理由を指定してください。");
+      return fail("correction_reason_required", "提出版と訂正・補足の理由を指定してください。");
     const id = newId();
     snapshot.versions.unshift({
       ...version,
@@ -289,7 +297,7 @@ export function executePreview(
     redirectTo = `cases/${item.id}/records/${record.id}/edit?version=${id}`;
   } else if (intent === "photo" && version) {
     if (version.status !== "draft")
-      return fail("提出済みの写真は変更できません。");
+      return fail("submitted_photo_immutable", "提出済みの写真は変更できません。");
     const file = form.get("photo");
     const exception = value(form, "exception") === "1";
     if (
@@ -297,7 +305,7 @@ export function executePreview(
       (!canManage(snapshot.context, item?.store_id) ||
         !value(form, "note").trim())
     )
-      return fail("撮影不能の理由と責任者の承認が必要です。");
+      return fail("photo_exception_approval_required", "撮影不能の理由と責任者の承認が必要です。");
     if (
       !exception &&
       (!(file instanceof File) ||
@@ -305,7 +313,7 @@ export function executePreview(
         file.size > 10 * 1024 * 1024 ||
         !["image/jpeg", "image/png", "image/webp"].includes(file.type))
     )
-      return fail("10MB以内のJPEG・PNG・WebP画像を選択してください。");
+      return fail("invalid_photo", "10MB以内のJPEG・PNG・WebP画像を選択してください。");
     const position = value(form, "position");
     workflow.photos = workflow.photos.filter(
       (p) => p.versionId !== version.id || p.position !== position,
@@ -327,7 +335,7 @@ export function executePreview(
     });
   } else if (intent === "answer" && version) {
     if (version.status !== "submitted")
-      return fail("提出済みの版を選択してください。");
+      return fail("submitted_version_required", "提出済みの版を選択してください。");
     const kind = value(form, "kind"),
       response = value(form, "response");
     const allowed: Record<string, string[]> = {
@@ -337,7 +345,7 @@ export function executePreview(
       作業承認: ["承認", "拒否", "保留"],
     };
     if (!allowed[kind]?.includes(response) || !value(form, "person").trim())
-      return fail("回答者と確認種別に対応する回答を選択してください。");
+      return fail("invalid_answer", "回答者と確認種別に対応する回答を選択してください。");
     workflow.answers.push({
       id: newId(),
       versionId: version.id,
@@ -349,7 +357,7 @@ export function executePreview(
     });
   } else if (intent === "requestConfirmation" && version) {
     if (version.status !== "submitted")
-      return fail("提出済みの版を選択してください。");
+      return fail("submitted_version_required", "提出済みの版を選択してください。");
     workflow.management.push({
       id: newId(),
       kind: "confirmation",
@@ -360,7 +368,7 @@ export function executePreview(
     });
   } else if (intent === "newDispute" && item && version) {
     if (!value(form, "text").trim())
-      return fail("異議の内容を入力してください。");
+      return fail("dispute_text_required", "異議の内容を入力してください。");
     workflow.disputes.push({
       id: newId(),
       caseId: item.id,
@@ -374,7 +382,7 @@ export function executePreview(
       (d) => d.id === value(form, "disputeId"),
     );
     if (!dispute || !value(form, "note").trim())
-      return fail("対象と対応内容を指定してください。");
+      return fail("dispute_action_required", "対象と対応内容を指定してください。");
     dispute.status = value(form, "status");
     dispute.history.push(`${dispute.status}：${value(form, "note")}`);
   } else if (intent === "maskPhoto") {
@@ -382,21 +390,21 @@ export function executePreview(
       (photo) =>
         photo.id === value(form, "photoId") && photo.versionId === version?.id,
     );
-    if (!photo) return fail("写真が見つかりません。");
+    if (!photo) return fail("photo_not_found", "写真が見つかりません。");
     workflow.publicMasks = {
       ...workflow.publicMasks,
       [photo.id]: value(form, "masked") === "1",
     };
   } else if (intent === "share" && version) {
     if (version.status !== "submitted")
-      return fail("提出済みの版を選んでください。");
+      return fail("submitted_version_required", "提出済みの版を選んでください。");
     const expires = value(form, "expires");
     if (
       !value(form, "recipient").trim() ||
       !Number.isFinite(Date.parse(expires)) ||
       Date.parse(expires) <= Date.now()
     )
-      return fail("共有相手と将来の有効期限を指定してください。");
+      return fail("invalid_share", "共有相手と将来の有効期限を指定してください。");
     workflow.shares.push({
       id: newId(),
       versionId: version.id,
@@ -407,7 +415,7 @@ export function executePreview(
     });
   } else if (intent === "revokeShare") {
     const share = workflow.shares.find((s) => s.id === value(form, "shareId"));
-    if (!share) return fail("共有が見つかりません。");
+    if (!share) return fail("share_not_found", "共有が見つかりません。");
     share.status = "revoked";
   } else if (intent === "retryRegistration" && version) {
     workflow.registration[version.id] = "登録済み";
@@ -423,7 +431,7 @@ export function executePreview(
       (v) => v.id === value(form, "vehicleId"),
     );
     if (!vehicle || !value(form, "identifier").trim())
-      return fail("車両と新しい識別情報を指定してください。");
+      return fail("identifier_required", "車両と新しい識別情報を指定してください。");
     for (const identifier of vehicle.identifiers)
       if (identifier.kind === value(form, "kind") && !identifier.valid_to)
         identifier.valid_to = now();
@@ -437,7 +445,7 @@ export function executePreview(
     });
   } else if (intent === "mergeVehicle") {
     if (!value(form, "reason").trim())
-      return fail("照合・関連付けの理由を入力してください。");
+      return fail("merge_reason_required", "照合・関連付けの理由を入力してください。");
     workflow.management.push({
       id: newId(),
       kind: "merge",
@@ -455,7 +463,7 @@ export function executePreview(
       !value(form, "name").trim() ||
       !value(form, "reason").trim()
     )
-      return fail("構成名・業態・変更理由を指定してください。");
+      return fail("configuration_input_required", "構成名・業態・変更理由を指定してください。");
     const field =
       settings.businesses[business].record_kinds.inspection.fields.odometer;
     const previous = field.required ?? false;
@@ -485,7 +493,7 @@ export function executePreview(
       !parsed.success ||
       configuration.status !== "試行済み"
     )
-      return fail("試行済みの構成版を指定してください。");
+      return fail("configuration_trial_required", "試行済みの構成版を指定してください。");
     const current = snapshot.context.configuration!;
     snapshot.configurations = {
       ...snapshot.configurations,
@@ -514,16 +522,16 @@ export function executePreview(
         ).length < 2 &&
         value(form, "status") === "停止"
       )
-        return fail("最後の企業管理者は停止できません。");
+        return fail("last_admin_required", "最後の企業管理者は停止できません。");
       if (existing.kind === "support" && value(form, "status") === "自己承認")
-        return fail("サポート担当者による自己承認はできません。");
+        return fail("support_self_approval_forbidden", "サポート担当者による自己承認はできません。");
       existing.status = value(form, "status");
       existing.history.push(
         `${now()}：${value(form, "note") || existing.status}`,
       );
     } else {
       if (!value(form, "name").trim())
-        return fail("名前または申請理由を入力してください。");
+        return fail("management_name_required", "名前または申請理由を入力してください。");
       workflow.management.push({
         id: newId(),
         kind,
@@ -538,7 +546,7 @@ export function executePreview(
           name: value(form, "name"),
         });
     }
-  } else return fail("対象または操作を確認してください。");
+  } else return fail("unsupported_operation", "対象または操作を確認してください。");
   workflow.audit.unshift({
     id: newId(),
     at: now(),
@@ -549,6 +557,7 @@ export function executePreview(
   return {
     snapshot,
     result: {
+      code: "preview_saved",
       message:
         "プレビューに反映しました。実データの保存・通知・外部登録は行っていません。",
       redirectTo,

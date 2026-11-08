@@ -1,3 +1,5 @@
+import uiStyles from "../../components/ui/ui.module.css";
+import workspaceStyles from "./workspace.module.css";
 import {
   createContext,
   use,
@@ -9,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useFetcher } from "react-router";
+import { useI18n, useTranslation } from "../../components/ui/display-settings";
 import { NavigationGuard } from "../../components/ui/navigation-guard";
 import { Alert, Button } from "../../components/ui/primitives";
 import type { CommandResult } from "./model";
@@ -20,38 +23,40 @@ const CommandContext = createContext<{
   errorId?: string;
 }>({ busy: false, result: null });
 export function CommandSubmit({
-  children = "保存する",
+  children,
   variant = "primary",
 }: {
   children?: ReactNode;
   variant?: "primary" | "secondary" | "danger";
 }) {
   const { busy } = use(CommandContext);
+  const t = useTranslation();
   return (
     <Button type="submit" variant={variant} disabled={busy}>
-      {busy ? "保存中…" : children}
+      {busy ? t("common.saving") : (children ?? t("common.save"))}
     </Button>
   );
 }
 export function CommandFeedback() {
   const { result, errorId } = use(CommandContext);
+  const { t, errorMessage, successMessage, fieldLabel, fieldError } = useI18n();
   if (!result) return null;
   return (
     <>
       {result.error && (
         <div id={errorId}>
           <Alert tone={result.uncertain ? "warning" : "danger"}>
-            {result.error}
+            {errorMessage(result.code, { uncertain: result.uncertain })}
             {result.fields &&
               Object.entries(result.fields).map(([key, messages]) => (
                 <p key={key}>
-                  {key.replace(/^entries\.|^entry:/, "")}：{messages.join(" ")}
+                  {t("common.fieldError", { field: fieldLabel(key), message: [...new Set(messages.map((message) => fieldError(message)))].join(" ") })}
                 </p>
               ))}
           </Alert>
         </div>
       )}
-      {result.message && <Alert tone="success">{result.message}</Alert>}
+      {result.message && <Alert tone="success">{successMessage(result.code)}</Alert>}
     </>
   );
 }
@@ -111,7 +116,7 @@ export function CommandForm({
       {Object.entries(hidden).map(([name, value]) => (
         <input type="hidden" key={name} name={name} value={value} />
       ))}
-      <fieldset disabled={busy} className="command-fields">
+      <fieldset disabled={busy} className={workspaceStyles["command-fields"]}>
         {children}
       </fieldset>
       <CommandFeedback />
@@ -154,7 +159,7 @@ export function CommandForm({
         ref={formRef}
         onSubmit={previewSubmit}
         onChange={markDirty}
-        className="ui-form"
+        className={uiStyles["ui-form"]}
       >
         {content}
       </form>
@@ -169,7 +174,7 @@ export function CommandForm({
         setDirty(false);
       }}
       onChange={markDirty}
-      className="ui-form"
+      className={uiStyles["ui-form"]}
       aria-busy={busy}
     >
       {content}

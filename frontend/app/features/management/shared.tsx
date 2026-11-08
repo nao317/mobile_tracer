@@ -1,4 +1,10 @@
-import { Form, Link, useNavigation, useSearchParams } from "react-router";
+import type { EnumGroup } from "../../i18n";
+import { useI18n } from "../../components/ui/display-settings";
+import appStyles from "../../app.module.css";
+import uiStyles from "../../components/ui/ui.module.css";
+import workspaceStyles from "../../features/workspace/workspace.module.css";
+import { Pagination as PaginationControl } from "../../components/molecules/pagination";
+import { Form, useNavigation, useSearchParams } from "react-router";
 import {
   Alert,
   Badge,
@@ -9,16 +15,8 @@ import {
   TextField,
   Textarea,
 } from "../../components/ui/primitives";
-import { businessTypes, formatDate, type Pagination } from "../workspace/model";
-import {
-  companyStatusLabels,
-  requestLabels,
-  requestStatusLabels,
-  type Company,
-  type CompanyProfile,
-  type ManagementRequest,
-  type ManagementResult,
-} from "./model";
+import { businessTypes, type Pagination } from "../workspace/model";
+import { type Company, type CompanyProfile, type ManagementRequest, type ManagementResult } from "./model";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { NavigationGuard } from "../../components/ui/navigation-guard";
 
@@ -32,7 +30,7 @@ export function ManagementSubmit({
   name?: string;
   value?: string;
   variant?: "primary" | "secondary" | "danger";
-}) {
+}) { const i18n = useI18n();
   const pending = useNavigation().state !== "idle";
   return (
     <Button
@@ -42,11 +40,11 @@ export function ManagementSubmit({
       value={value}
       disabled={pending}
     >
-      {pending ? "処理中…" : children}
+      {pending ? i18n.t("management.processing") : children}
     </Button>
   );
 }
-export function ActionNotice({ result }: { result?: ManagementResult }) {
+export function ActionNotice({ result }: { result?: ManagementResult }) { const i18n = useI18n();
   const notice = useRef<HTMLDivElement>(null),
     submitted = useRef<HTMLFormElement | null>(null);
   const changed = useRef(new Set<HTMLFormElement>()),
@@ -54,7 +52,7 @@ export function ActionNotice({ result }: { result?: ManagementResult }) {
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
   useEffect(() => {
-    const main = notice.current?.closest("main");
+    const main = notice.current?.closest("main") ?? notice.current?.parentElement;
     function change(event: Event) {
       const form = (event.target as HTMLElement).closest("form");
       if (form?.method.toLowerCase() === "post") {
@@ -111,13 +109,13 @@ export function ActionNotice({ result }: { result?: ManagementResult }) {
           changed.current.clear();
         }}
       />
-      {result?.message && <Alert tone="success">{result.message}</Alert>}
+      {result?.message && <Alert tone="success">{i18n.t("common.completed")}</Alert>}
       {result?.error && (
         <Alert tone={result.uncertain ? "warning" : "danger"}>
-          {result.error}
+          {i18n.errorMessage(result.code, { uncertain: result.uncertain })}
           {Object.entries(result.fields ?? {}).map(([key, messages]) => (
             <p key={key}>
-              {key}：{messages.join(" ")}
+              {i18n.t("common.fieldError", { field: i18n.fieldLabel(key), message: [...new Set(messages.map(message => i18n.fieldError(message)))].join(" ") })}
             </p>
           ))}
         </Alert>
@@ -139,14 +137,14 @@ export function CompanyFields({
 }: {
   company?: Company;
   profile?: CompanyProfile;
-}) {
+}) { const i18n = useI18n();
   const prefix = useId();
   return (
     <>
       <TextField
         id={`${prefix}-company-name`}
         name="name"
-        label="企業の表示名"
+        label={i18n.t("management.companyDisplayName")}
         defaultValue={company?.name ?? ""}
         maxLength={200}
         required
@@ -154,12 +152,12 @@ export function CompanyFields({
       <TextField
         id={`${prefix}-legal-name`}
         name="legal_name"
-        label="正式な企業名"
+        label={i18n.t("management.legalCompanyName")}
         defaultValue={profile?.legal_name ?? ""}
         maxLength={200}
         required
       />
-      <Field id={`${prefix}-company-description`} label="企業・サービスの紹介">
+      <Field id={`${prefix}-company-description`} label={i18n.t("management.companyDescription")}>
         <Textarea
           id={`${prefix}-company-description`}
           name="description"
@@ -167,10 +165,10 @@ export function CompanyFields({
           maxLength={4000}
         />
       </Field>
-      <fieldset className="ui-stack gap-2">
-        <legend className="font-semibold mb-2">業態（1つ以上選択）</legend>
-        {Object.entries(businessTypes).map(([key, label]) => (
-          <label className="workspace-check" key={key}>
+      <fieldset className={`${uiStyles["ui-stack"]} ${appStyles["gap-2"]}`}>
+        <legend className={`${appStyles["font-semibold"]} ${appStyles["mb-2"]}`}>{i18n.t("management.selectBusinessTypes")}</legend>
+        {Object.keys(businessTypes).map((key) => (
+          <label className={workspaceStyles["workspace-check"]} key={key}>
             <input
               type="checkbox"
               name="business_types"
@@ -181,7 +179,7 @@ export function CompanyFields({
                 ) ?? false
               }
             />
-            {label}
+            {i18n.enumLabel("business", key)}
           </label>
         ))}
       </fieldset>
@@ -189,7 +187,7 @@ export function CompanyFields({
         id={`${prefix}-company-website`}
         name="website"
         type="url"
-        label="Webサイト"
+        label={i18n.t("management.website")}
         defaultValue={profile?.website ?? ""}
         maxLength={2000}
         placeholder="https://example.com…"
@@ -198,14 +196,14 @@ export function CompanyFields({
         id={`${prefix}-company-phone`}
         name="phone"
         type="tel"
-        label="電話番号"
+        label={i18n.t("management.phone")}
         defaultValue={profile?.phone ?? ""}
         maxLength={100}
       />
       <TextField
         id={`${prefix}-company-address`}
         name="address"
-        label="住所"
+        label={i18n.t("management.address")}
         defaultValue={profile?.address ?? ""}
         maxLength={1000}
       />
@@ -214,85 +212,83 @@ export function CompanyFields({
         name="contact_email"
         type="email"
         spellCheck={false}
-        label="企業の連絡先メール"
+        label={i18n.t("management.companyEmail")}
         defaultValue={profile?.contact_email ?? ""}
         maxLength={320}
       />
     </>
   );
 }
-export function CompanyDetails({ company }: { company: Company }) {
+export function CompanyDetails({ company }: { company: Company }) { const i18n = useI18n();
   return (
-    <dl className="workspace-summary">
+    <dl className={workspaceStyles["workspace-summary"]}>
       <div>
-        <dt>企業名</dt>
+        <dt>{i18n.t("management.companyName")}</dt>
         <dd>{company.name}</dd>
       </div>
       <div>
-        <dt>正式名称</dt>
-        <dd>{company.profile.legal_name || "未登録"}</dd>
+        <dt>{i18n.t("management.legalName")}</dt>
+        <dd>{company.profile.legal_name || i18n.t("management.unregistered")}</dd>
       </div>
       <div>
-        <dt>状態</dt>
+        <dt>{i18n.t("management.status")}</dt>
         <dd>
           <Badge tone={company.status === "active" ? "success" : "warning"}>
-            {companyStatusLabels[company.status]}
+            {i18n.enumLabel("companyStatus", company.status)}
           </Badge>
         </dd>
       </div>
       <div>
-        <dt>業態</dt>
+        <dt>{i18n.t("management.businessType")}</dt>
         <dd>
-          {company.profile.business_types
-            .map((type) => businessTypes[type])
-            .join("、") || "未登録"}
+          {company.profile.business_types.length ? i18n.formatList(company.profile.business_types.map((type) => i18n.enumLabel("business", type))) : i18n.t("management.unregistered")}
         </dd>
       </div>
       <div>
-        <dt>住所</dt>
-        <dd>{company.profile.address || "未登録"}</dd>
+        <dt>{i18n.t("management.address")}</dt>
+        <dd>{company.profile.address || i18n.t("management.unregistered")}</dd>
       </div>
       <div>
-        <dt>連絡先</dt>
+        <dt>{i18n.t("management.contact")}</dt>
         <dd>
-          {company.profile.contact_email || company.profile.phone || "未登録"}
+          {company.profile.contact_email || company.profile.phone || i18n.t("management.unregistered")}
         </dd>
       </div>
     </dl>
   );
 }
-export function RequestDetails({ request }: { request: ManagementRequest }) {
+export function RequestDetails({ request }: { request: ManagementRequest }) { const i18n = useI18n();
   const payload = request.payload,
     profile =
       typeof payload.profile === "object" && payload.profile
         ? (payload.profile as Record<string, unknown>)
         : null;
   const labels: Record<string, string> = {
-    display_name: "業者としての表示名",
-    reason: "申請理由",
-    name: "企業の表示名",
-    legal_name: "正式な企業名",
-    description: "企業・サービスの紹介",
-    website: "Webサイト",
-    phone: "電話番号",
-    address: "住所",
-    contact_email: "連絡先メール",
-    business_types: "業態",
-    version: "申請時の企業情報の版",
+    display_name: i18n.t("management.businessDisplayName"),
+    reason: i18n.t("management.applicationReason"),
+    name: i18n.t("management.companyDisplayName"),
+    legal_name: i18n.t("management.legalCompanyName"),
+    description: i18n.t("management.companyDescription"),
+    website: i18n.t("management.website"),
+    phone: i18n.t("management.phone"),
+    address: i18n.t("management.address"),
+    contact_email: i18n.t("management.contactEmail"),
+    business_types: i18n.t("management.businessType"),
+    version: i18n.t("management.applicationVersion"),
   };
   return (
-    <div className="ui-stack">
-      <dl className="workspace-summary">
+    <div className={uiStyles["ui-stack"]}>
+      <dl className={workspaceStyles["workspace-summary"]}>
         <div>
-          <dt>申請種別</dt>
-          <dd>{requestLabels[request.kind]}</dd>
+          <dt>{i18n.t("management.requestKind")}</dt>
+          <dd>{i18n.enumLabel("requestKind", request.kind)}</dd>
         </div>
         <div>
-          <dt>申請日時</dt>
-          <dd>{formatDate(request.created_at)}</dd>
+          <dt>{i18n.t("management.requestedAt")}</dt>
+          <dd>{i18n.formatDate(request.created_at)}</dd>
         </div>
         <div>
-          <dt>審査状態</dt>
+          <dt>{i18n.t("management.reviewStatus")}</dt>
           <dd>
             <Badge
               tone={
@@ -303,30 +299,24 @@ export function RequestDetails({ request }: { request: ManagementRequest }) {
                     : "warning"
               }
             >
-              {requestStatusLabels[request.status]}
+              {i18n.enumLabel("requestStatus", request.status)}
             </Badge>
           </dd>
         </div>
         <div>
-          <dt>審査日時</dt>
-          <dd>{formatDate(request.decided_at)}</dd>
+          <dt>{i18n.t("management.reviewedAt")}</dt>
+          <dd>{i18n.formatDate(request.decided_at)}</dd>
         </div>
       </dl>
-      <dl className="ui-stack gap-3">
+      <dl className={`${uiStyles["ui-stack"]} ${appStyles["gap-3"]}`}>
         {Object.entries({ ...payload, ...(profile ?? {}) })
           .filter(([key]) => key !== "profile")
           .map(([key, value]) => (
             <div key={key}>
-              <dt className="ui-muted">{labels[key] ?? key}</dt>
+              <dt className={uiStyles["ui-muted"]}>{labels[key] ?? key}</dt>
               <dd>
                 {Array.isArray(value)
-                  ? value
-                      .map(
-                        (v) =>
-                          businessTypes[v as keyof typeof businessTypes] ??
-                          String(v),
-                      )
-                      .join("、")
+                  ? i18n.formatList(value.map((v) => i18n.enumLabel("business", String(v))))
                   : typeof value === "object"
                     ? "—"
                     : String(value ?? "—")}
@@ -336,53 +326,32 @@ export function RequestDetails({ request }: { request: ManagementRequest }) {
       </dl>
       {request.decision_reason && (
         <Alert tone={request.status === "rejected" ? "warning" : "info"}>
-          <p>審査者：{request.decider_email || "システム管理者"}</p>
-          <p>審査理由：{request.decision_reason}</p>
+          <p>{i18n.t("management.reviewerLabel")}{request.decider_email || i18n.t("management.systemAdmin")}</p>
+          <p>{i18n.t("management.reviewReasonLabel")}{request.decision_reason}</p>
         </Alert>
       )}
     </div>
   );
 }
-export function ManagementPagination({
-  pagination,
-}: {
-  pagination: Pagination;
-}) {
-  const [search] = useSearchParams();
-  const to = (page: number) => {
-    const next = new URLSearchParams(search);
-    next.set("page", String(page));
-    return `?${next}`;
-  };
-  return (
-    <nav className="workspace-pagination" aria-label="ページ切り替え">
-      <span>
-        {pagination.total}件 / {pagination.page}ページ
-      </span>
-      {pagination.page > 1 && <Link to={to(pagination.page - 1)}>前へ</Link>}
-      {pagination.page * pagination.page_size < pagination.total && (
-        <Link to={to(pagination.page + 1)}>次へ</Link>
-      )}
-    </nav>
-  );
+export function ManagementPagination({ pagination }: { pagination: Pagination }) {
+  return <PaginationControl pagination={pagination} />;
 }
-export function ManagementFilters({ children }: { children?: ReactNode }) {
+export function ManagementFilters({ children }: { children?: ReactNode }) { const i18n = useI18n();
   const [search] = useSearchParams();
   return (
-    <Form method="get" className="workspace-filter">
-      <Field id="management-q" label="検索">
+    <Form method="get" className={workspaceStyles["workspace-filter"]}>
+      <Field id="management-q" label={i18n.t("management.search")}>
         <Input
           id="management-q"
           name="q"
           defaultValue={search.get("q") ?? ""}
           maxLength={200}
-          placeholder="名前・メールアドレスなど…"
+          placeholder={i18n.t("management.searchPlaceholder")}
         />
       </Field>
       {children}
       <Button type="submit" variant="secondary">
-        検索する
-      </Button>
+        {i18n.t("management.searchAction")}</Button>
     </Form>
   );
 }
@@ -390,11 +359,13 @@ export function StatusFilter({
   label,
   values,
   name = "status",
+  enumGroup,
 }: {
   label: string;
   values: Record<string, string>;
+  enumGroup?: EnumGroup;
   name?: string;
-}) {
+}) { const i18n = useI18n();
   const [search] = useSearchParams();
   return (
     <Field id={`filter-${name}`} label={label}>
@@ -403,10 +374,10 @@ export function StatusFilter({
         name={name}
         defaultValue={search.get(name) ?? ""}
       >
-        <option value="">すべて</option>
-        {Object.entries(values).map(([key, text]) => (
+        <option value="">{i18n.t("management.all")}</option>
+        {Object.keys(values).map((key) => (
           <option key={key} value={key}>
-            {text}
+            {i18n.enumLabel(enumGroup ?? (name === "account_type" ? "accountType" : name === "kind" ? "requestKind" : "companyStatus"), key)}
           </option>
         ))}
       </Select>

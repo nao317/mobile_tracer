@@ -1,7 +1,10 @@
+import { createTranslator } from "../i18n";
+import { routeLocale } from "../i18n/route-locale";
+import { useI18n } from "../components/ui/display-settings";
+import uiStyles from "../components/ui/ui.module.css";
 import { data, Form, redirect } from "react-router";
 import { z } from "zod";
-import { accountLabels } from "../features/management/model";
-import { BrandMark } from "../components/ui/display-settings";
+
 import {
   Alert,
   Button,
@@ -29,14 +32,8 @@ const contextSchema = z.object({
     }),
   }),
 });
-const roleLabels: Record<string, string> = {
-  tenant_admin: "企業管理者",
-  store_manager: "店舗責任者",
-  staff: "担当者",
-  auditor: "監査担当",
-};
-export function meta() {
-  return [{ title: "アカウント | MobilTracer" }];
+export function meta({ matches }: Route.MetaArgs) {
+  return [{ title: `${createTranslator(routeLocale(matches))("navigation.account")} | Mobile Tracer` }];
 }
 export async function loader({ request }: Route.LoaderArgs) {
   const auth = await requireSession(request);
@@ -89,28 +86,26 @@ export async function action({ request }: Route.ActionArgs) {
 export default function Account({
   loaderData,
   actionData,
-}: Route.ComponentProps) {
+}: Route.ComponentProps) { const i18n = useI18n();
   const { session, roles } = loaderData;
   return (
-    <main className="ui-standalone ui-stack">
-      <BrandMark />
-      <PageHeader title="アカウント" />
-      <p>{session.user.email}</p>
+    <div className={uiStyles["ui-stack"]}>
+      <PageHeader title={i18n.t("management.account")} />
       <p>
-        ユーザー区分：{accountLabels[session.user.account_type ?? "general"]}
+        {i18n.t("management.accountTypeLabel")}{i18n.enumLabel("accountType", session.user.account_type ?? "general")}
       </p>
-      <a href="/account/requests" className="ui-link-button">
+      <a href={session.user.account_type === "business" ? "/account/requests?view=companies" : "/account/requests?view=upgrade"} className={uiStyles["ui-link-button"]}>
         {session.user.account_type === "business"
-          ? "企業・自分の申請を管理"
-          : "業者ユーザーへの変更を申請"}
+          ? i18n.t("management.manageMyApplications")
+          : i18n.t("management.applyUpgrade")}
       </a>
-      {actionData?.error && <Alert tone="danger">{actionData.error}</Alert>}
-      <Panel title="業務で利用する所属">
+      {actionData?.error && <Alert tone="danger">{i18n.errorMessage(undefined)}</Alert>}
+      <Panel title={i18n.t("management.workMembership")}>
         {session.memberships.length ? (
-          <Form method="post" className="space-y-3">
+          <Form method="post" className={uiStyles["ui-form"]}>
             <input type="hidden" name="intent" value="membership" />
             <input type="hidden" name="_csrf" value={session.csrf_token} />
-            <Field id="membership" label="所属・担当者">
+            <Field id="membership" label={i18n.t("management.membershipStaff")}>
               <Select
                 id="membership"
                 name="staff_id"
@@ -118,8 +113,7 @@ export default function Account({
                 required
               >
                 <option value="" disabled>
-                  所属を選択してください
-                </option>
+                  {i18n.t("management.selectMembership")}</option>
                 {session.memberships.map((m) => (
                   <option value={m.staff_id} key={m.staff_id}>
                     {m.tenant_name} / {m.display_name}
@@ -127,43 +121,25 @@ export default function Account({
                 ))}
               </Select>
             </Field>
-            <Button type="submit">この所属を使う</Button>
+            <Button type="submit">{i18n.t("management.useMembership")}</Button>
           </Form>
         ) : (
           <p>
-            利用できる業務所属がありません。
-            {session.user.account_type === "business"
-              ? "上の申請画面から企業の作成を申請するか、管理者に既存企業への所属追加を依頼してください。"
-              : "業務利用には、業者ユーザーへの変更申請の承認と企業への所属が必要です。"}
+            {i18n.t("management.noWorkMembership")}{session.user.account_type === "business"
+              ? i18n.t("management.businessMembershipHelp")
+              : i18n.t("management.generalMembershipHelp")}
           </p>
         )}
         {!!roles.length && (
           <p>
-            現在の権限：
-            {roles.map((role) => roleLabels[role] || role).join("、")}
+            {i18n.t("management.currentRolesLabel")}{i18n.formatList(roles.map((role) => i18n.enumLabel("role", role)))}
           </p>
         )}
       </Panel>
       {session.selected_staff_id && roles.length > 0 && (
-        <a href="/app" className="ui-link-button">
-          業務ワークスペースを開く
-        </a>
+        <a href="/app" className={uiStyles["ui-link-button"]}>
+          {i18n.t("management.openWorkspace")}</a>
       )}
-      <a href="/" className="ui-text-link">
-        ホームへ戻る
-      </a>
-      {session.system_admin && (
-        <a href="/admin" className="block underline">
-          システム管理者ページへ
-        </a>
-      )}
-      <Form method="post">
-        <input type="hidden" name="intent" value="logout" />
-        <input type="hidden" name="_csrf" value={session.csrf_token} />
-        <Button type="submit" variant="secondary">
-          ログアウト
-        </Button>
-      </Form>
-    </main>
+    </div>
   );
 }

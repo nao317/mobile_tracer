@@ -1,3 +1,4 @@
+import styles from "./auth.module.css";
 import { LockKeyhole, Mail, Moon, Sun } from "lucide-react";
 import { Alert, Button, TextField } from "../../components/ui/primitives";
 import SplitText from "../../components/ui/split-text";
@@ -27,12 +28,12 @@ export function LoginView(props: LoginProps) {
   } = useLogin(props);
   const { config } = props;
   return (
-    <main className="login-page" lang={language} data-theme={theme}>
-      <section className="login-shell" aria-labelledby="login-title">
-        <header className="login-header">
+    <main className={styles["login-page"]} lang={language} data-theme={theme}>
+      <section className={styles["login-shell"]} aria-labelledby="login-title">
+        <header className={styles["login-header"]}>
           <SplitText
             id="login-title"
-            className="login-brand"
+            className={styles["login-brand"]}
             tag="h1"
             text="Mobile Tracer"
             trigger="load"
@@ -40,13 +41,13 @@ export function LoginView(props: LoginProps) {
             duration={1.4}
           />
           <div
-            className="login-display-controls"
+            className={styles["login-display-controls"]}
             role="group"
             aria-label={t.settings}
           >
             <Button
               type="button"
-              className="login-display-button"
+              className={styles["login-display-button"]}
               lang={language === "ja" ? "en" : "ja"}
               aria-label={language === "ja" ? "English" : "日本語"}
               title={language === "ja" ? "English" : "日本語"}
@@ -56,7 +57,7 @@ export function LoginView(props: LoginProps) {
             </Button>
             <Button
               type="button"
-              className="login-display-button"
+              className={styles["login-display-button"]}
               aria-label={theme === "light" ? t.dark : t.light}
               title={theme === "light" ? t.dark : t.light}
               onClick={changeTheme}
@@ -70,12 +71,12 @@ export function LoginView(props: LoginProps) {
           </div>
         </header>
         {config?.enabled ? (
-          <div className="login-card">
-            <div className="login-tabs" role="tablist" aria-label={t.tabs}>
+          <div className={styles["login-card"]}>
+            <div className={styles["login-tabs"]} role="tablist" aria-label={t.tabs}>
               {(["login", "register"] as const).map((tab) => (
                 <Button
                   key={tab}
-                  className="login-tab"
+                  className={styles["login-tab"]}
                   type="button"
                   role="tab"
                   id={`login-tab-${tab}`}
@@ -91,15 +92,15 @@ export function LoginView(props: LoginProps) {
               ))}
             </div>
             <div
-              className="login-panel"
+              className={styles["login-panel"]}
               id="login-panel"
               role="tabpanel"
               aria-labelledby={`login-tab-${activeTab}`}
             >
               {mode === "reset" && (
-                <h2 className="login-reset-title">{t.resetTitle}</h2>
+                <h2 className={styles["login-reset-title"]}>{t.resetTitle}</h2>
               )}
-              <form className="login-form" onSubmit={submit} aria-busy={busy}>
+              <form className={styles["login-form"]} onSubmit={submit} aria-busy={busy}>
                 <TextField
                   appearance="login"
                   id="login-email"
@@ -138,7 +139,7 @@ export function LoginView(props: LoginProps) {
                   />
                 )}
                 <Button
-                  className="login-primary-button"
+                  className={styles["login-primary-button"]}
                   type="submit"
                   disabled={busy}
                 >
@@ -148,23 +149,23 @@ export function LoginView(props: LoginProps) {
               {failure && (
                 <Alert
                   tone="danger"
-                  className="login-feedback login-feedback--error"
+                  className={styles["login-feedback"] + " " + styles["login-feedback--error"]}
                 >
                   {t[failure]}
                 </Alert>
               )}
               {message && (
-                <Alert className="login-feedback">{t[message]}</Alert>
+                <Alert className={styles["login-feedback"]}>{t[message]}</Alert>
               )}
-              <div className="login-secondary-actions">
+              <div className={styles["login-secondary-actions"]}>
                 <Button
                   type="button"
-                  className="login-google-button"
+                  className={styles["login-google-button"]}
                   onClick={() => void authenticate(true)}
                   disabled={busy}
                 >
                   <img
-                    className="login-google-logo"
+                    className={styles["login-google-logo"]}
                     src="/assets/login/google-g.png"
                     alt=""
                     width="200"
@@ -179,7 +180,7 @@ export function LoginView(props: LoginProps) {
                         : t.google}
                   </span>
                 </Button>
-                <div className="login-text-actions">
+                <div className={styles["login-text-actions"]}>
                   <Button
                     type="button"
                     disabled={busy}
@@ -190,7 +191,7 @@ export function LoginView(props: LoginProps) {
                     {mode === "reset" ? t.back : t.forgot}
                   </Button>
                 </div>
-                <a className="login-home-link" href="/">
+                <a className={styles["login-home-link"]} href="/">
                   {t.home}
                 </a>
               </div>
@@ -201,12 +202,12 @@ export function LoginView(props: LoginProps) {
             {failure && (
               <Alert
                 tone="danger"
-                className="login-feedback login-feedback--error"
+                className={styles["login-feedback"] + " " + styles["login-feedback--error"]}
               >
                 {t[failure]}
               </Alert>
             )}
-            <Alert className="login-unavailable">{t.unavailable}</Alert>
+            <Alert className={styles["login-unavailable"]}>{t.unavailable}</Alert>
           </>
         )}
       </section>

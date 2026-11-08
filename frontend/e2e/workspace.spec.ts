@@ -1,6 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { screenDefinitions } from "../app/features/workspace/screens";
 import { demoCaseIds, demoId } from "../app/features/workspace/preview-data";
+
+
+async function navigateInSidebar(page: Page, href: string) {
+  const navigation = page.getByRole("navigation", { name: "メインナビゲーション" });
+  const link = navigation.locator(`a[href="${href}"]`);
+  if (!(await link.isVisible())) {
+    await link.locator("..").locator("..").getByRole("button").click();
+  }
+  await link.click();
+  await expect(page.getByRole("main")).toBeFocused();
+}
 
 test.describe("UI preview", () => {
   test.skip(
@@ -29,7 +40,7 @@ test.describe("UI preview", () => {
       expect(response?.status(), definition.title).toBe(200);
       await expect(page.getByRole("main")).toBeVisible();
       await expect(
-        page.getByText("架空データのプレビュー", { exact: true }),
+        page.locator("summary").filter({ hasText: "UIプレビュー" }),
       ).toBeVisible();
       expect(
         await page.evaluate(
@@ -66,8 +77,8 @@ test.describe("UI preview", () => {
       await expect(
         page.getByRole("status").filter({ hasText: "プレビューに反映" }),
       ).toBeVisible();
-      await page.getByRole("link", { name: "記録の詳細へ" }).click();
-      await page.getByRole("link", { name: "提出前確認へ" }).click();
+      await page.getByRole("main").getByRole("link", { name: "記録の詳細へ" }).click();
+      await page.getByRole("main").getByRole("link", { name: "提出前確認へ" }).click();
       await page
         .getByLabel("提出する版と、入力・写真の内容を確認しました")
         .check();
@@ -75,11 +86,12 @@ test.describe("UI preview", () => {
         .getByRole("button", { name: "この内容で提出", exact: true })
         .click();
       await expect(
-        page.getByRole("heading", { name: "記録の内容" }),
+        page.getByRole("region", { name: "記録の内容", exact: true }),
       ).toBeVisible();
       await expect(page.getByText("提出済み", { exact: true })).toBeVisible();
-      await page.getByRole("link", { name: "確認・回答", exact: true }).click();
+      await navigateInSidebar(page, `/preview/cases/${caseId}/answers`);
       await page.getByLabel("対象の記録版").selectOption(versionId);
+      await page.getByRole("main").getByRole("link", { name: "新規作成", exact: true }).click();
       await page.getByLabel("回答者名（プレビュー用）").fill("テスト利用者");
       await page
         .getByLabel("確認種別", { exact: true })
@@ -87,10 +99,11 @@ test.describe("UI preview", () => {
       await page.getByLabel("回答", { exact: true }).selectOption("拒否");
       await page.getByLabel("対象版・確認文面・回答内容を確認しました").check();
       await page.getByRole("button", { name: "この版への回答を記録" }).click();
+      await page.getByRole("main").getByRole("link", { name: "履歴", exact: true }).click();
       await expect(
         page.getByText("状態同意：拒否", { exact: true }),
       ).toBeVisible();
-      await page.getByRole("link", { name: "比較", exact: true }).click();
+      await navigateInSidebar(page, `/preview/cases/${caseId}/compare`);
       await expect(
         page.getByRole("heading", { name: "項目の比較" }),
       ).toBeVisible();
@@ -107,14 +120,13 @@ test.describe("UI preview", () => {
     await page.getByLabel("識別情報", { exact: true }).fill("E2E-1234");
     await page.getByRole("button", { name: "車両を登録", exact: true }).click();
     await expect(
-      page.getByRole("heading", { name: "E2Eテスト車両" }),
+      page.getByRole("main").getByText("E2Eテスト車両", { exact: true }),
     ).toBeVisible();
     await page.getByRole("link", { name: "この車両で案件を作成" }).click();
     await page.getByLabel("業態", { exact: true }).selectOption("rental");
     await page.getByRole("button", { name: "案件を作成", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { name: "記録", exact: true }),
-    ).toBeVisible();
+    await expect(page).toHaveURL(/\/preview\/cases\/[^/?]+$/);
+    await navigateInSidebar(page, new URL(page.url()).pathname + "/records");
     await page.getByRole("link", { name: "記録を追加", exact: true }).click();
     await page
       .getByRole("button", { name: "下書きを保存", exact: true })
@@ -122,8 +134,8 @@ test.describe("UI preview", () => {
     await expect(
       page.getByRole("heading", { name: "下書き v1" }),
     ).toBeVisible();
-    await page.getByRole("link", { name: "記録の詳細へ" }).click();
-    await page.getByRole("link", { name: "提出前確認へ" }).click();
+    await page.getByRole("main").getByRole("link", { name: "記録の詳細へ" }).click();
+    await page.getByRole("main").getByRole("link", { name: "提出前確認へ" }).click();
     await expect(
       page.getByRole("alert").filter({ hasText: "未入力" }),
     ).toBeVisible();
@@ -145,10 +157,11 @@ test.describe("UI preview", () => {
     await expect(
       page.getByRole("heading", { name: "下書き v2" }),
     ).toBeVisible();
-    await page.getByRole("link", { name: "記録の詳細へ" }).click();
+    await page.getByRole("main").getByRole("link", { name: "記録の詳細へ" }).click();
     await expect(page.getByText("未回答", { exact: true })).toBeVisible();
+    await navigateInSidebar(page, `/preview/cases/${caseId}/records/${recordId}/history`);
     await page.getByRole("link", { name: "v1・提出済み" }).click();
-    await expect(page.getByText("受領：受領", { exact: true })).toBeVisible();
+    await expect(page.getByText(/受領[:：]\s*受領/)).toBeVisible();
   });
   test("revoked shares and expired shares stop displaying the record", async ({
     page,
@@ -156,7 +169,8 @@ test.describe("UI preview", () => {
     await page.goto(
       `/preview/cases/${demoCaseIds[0]}/sharing?version=${demoId(41)}`,
     );
-    await page.getByText("共有を取り消す", { exact: true }).first().click();
+    await page.getByRole("link", { name: "共有を取り消す", exact: true }).first().click();
+    await page.locator("summary").filter({ hasText: "共有を取り消す" }).click();
     await page
       .getByLabel(
         "新しいアクセスを停止します。本人控えと取得済み帳票は別に扱います。",
@@ -178,6 +192,7 @@ test.describe("UI preview", () => {
     page,
   }) => {
     await page.goto("/preview/vehicles");
+    await page.locator("summary").filter({ hasText: "UIプレビュー" }).click();
     await page.getByLabel("プレビューの役割").selectOption("auditor");
     await expect(page.getByRole("link", { name: "車両を登録" })).toHaveCount(0);
     await page
@@ -187,7 +202,8 @@ test.describe("UI preview", () => {
       page.getByRole("heading", { name: "表示する権限がありません" }),
     ).toBeVisible();
     await page.getByLabel("表示状態", { exact: true }).selectOption("normal");
-    await expect(page.getByRole("heading", { name: "車両一覧" })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: "車両を登録", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("main")).not.toContainText("表示する権限がありません");
   });
   test("desktop overview has a complete navigation and review entry", async ({
     page,
@@ -198,7 +214,7 @@ test.describe("UI preview", () => {
       page.getByRole("navigation", { name: "メインナビゲーション" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "進行中の案件" }),
+      page.getByRole("main").getByRole("link", { name: "案件", exact: true }).first(),
     ).toBeVisible();
     await page.screenshot({
       path: "/tmp/mobile-tracer-desktop.png",
@@ -212,7 +228,7 @@ test.describe("UI preview", () => {
       `/preview/cases/${demoCaseIds[0]}/records/${demoId(32)}/edit`,
     );
     await page.getByLabel("走行距離（km）（提出時に必須）").fill("999");
-    await page.getByRole("link", { name: "記録の詳細へ" }).click();
+    await page.getByRole("main").getByRole("link", { name: "記録の詳細へ" }).click();
     await expect(
       page.getByText("保存していない入力があります。移動しますか？", {
         exact: false,
@@ -227,9 +243,9 @@ test.describe("UI preview", () => {
     await page
       .getByRole("button", { name: "下書きを保存", exact: true })
       .click();
-    await page.getByRole("link", { name: "記録の詳細へ" }).click();
+    await page.getByRole("main").getByRole("link", { name: "記録の詳細へ" }).click();
     await expect(
-      page.getByRole("heading", { name: "記録の内容" }),
+      page.getByRole("region", { name: "記録の内容", exact: true }),
     ).toBeVisible();
   });
   test("a photo upload can fail and is then blocked from submission", async ({
@@ -238,6 +254,7 @@ test.describe("UI preview", () => {
     await page.goto(
       `/preview/cases/${demoCaseIds[0]}/records/${demoId(32)}/photos`,
     );
+    await page.getByRole("main").getByRole("link", { name: "写真を追加", exact: true }).click();
     await page.getByLabel("写真原本", { exact: true }).setInputFiles({
       name: "sample.png",
       mimeType: "image/png",
@@ -247,19 +264,15 @@ test.describe("UI preview", () => {
       ),
     });
     await page.getByRole("button", { name: "写真をプレビューに反映" }).click();
-    await expect(
-      page.getByRole("img", { name: "正面の撮影原本", exact: true }),
-    ).toBeVisible();
+    await page.getByRole("main").getByRole("link", { name: "撮影一覧", exact: true }).click();
+    await expect(page.getByRole("img", { name: "正面の撮影原本", exact: true })).toBeVisible();
+    await page.getByRole("main").getByRole("link", { name: "送信を再試行", exact: true }).click();
     await page.getByLabel("送信失敗の表示を試す（プレビュー用）").check();
     await page.getByRole("button", { name: "写真をプレビューに反映" }).click();
+    await page.getByRole("main").getByRole("link", { name: "撮影一覧", exact: true }).click();
     await expect(page.getByText("送信失敗", { exact: true })).toBeVisible();
-    await page.getByRole("link", { name: "記録・概要", exact: true }).click();
-    await page
-      .locator(
-        `a[href="/preview/cases/${demoCaseIds[0]}/records/${demoId(32)}"]`,
-      )
-      .click();
-    await page.getByRole("link", { name: "提出前確認へ" }).click();
+    await navigateInSidebar(page, `/preview/cases/${demoCaseIds[0]}/records/${demoId(32)}`);
+    await page.getByRole("main").getByRole("link", { name: "提出前確認へ" }).click();
     await expect(
       page.getByRole("alert").filter({ hasText: "未完了の撮影箇所：正面" }),
     ).toBeVisible();
@@ -307,19 +320,21 @@ test("live routes create and reopen a draft through the HTTP API with session an
   await page.getByLabel("識別情報", { exact: true }).fill("HTTP-TEST");
   await page.getByRole("button", { name: "車両を登録", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "HTTP接続テスト車両" }),
+    page.getByRole("main").getByText("HTTP接続テスト車両", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "この車両で案件を作成" }).click();
   await page.getByLabel("業態", { exact: true }).selectOption("rental");
   await page.getByRole("button", { name: "案件を作成", exact: true }).click();
-  await page.getByRole("link", { name: "記録を追加", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/cases\/[^/?]+$/);
+  await navigateInSidebar(page, new URL(page.url()).pathname + "/records");
+  await page.getByRole("main").getByRole("link", { name: "記録を追加", exact: true }).click();
   await page.getByLabel("走行距離（km）（提出時に必須）").fill("25000");
   await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "記録の内容" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "記録の内容", exact: true })).toBeVisible();
   await expect(
     page.getByText("現在は確認できません", { exact: true }),
   ).toHaveCount(3);
-  await page.getByRole("link", { name: "下書きを編集", exact: true }).click();
+  await page.getByRole("main").getByRole("link", { name: "下書きを編集", exact: true }).click();
   await expect(page.getByLabel("走行距離（km）（提出時に必須）")).toHaveValue(
     "25000",
   );

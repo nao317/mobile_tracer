@@ -33,7 +33,15 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
     reason: string,
   ) {
     await admin.goto("/admin/requests?status=pending");
-    const form = admin.getByRole("region", { name: kind }).locator("form");
+    const [requestKind, applicant] = kind.split(" / ");
+    const row = admin.getByRole("row").filter({ hasText: applicant })
+      .filter({ has: admin.getByRole("link", { name: requestKind, exact: true }) });
+    await row.getByRole("link", { name: requestKind, exact: true }).click();
+    await expect(admin).toHaveURL(/view=detail/);
+    await expect(admin.getByRole("region", { name: kind, exact: true })).toBeVisible();
+    await admin.getByRole("main").getByRole("link", { name: "申請を審査", exact: true }).click();
+    await expect(admin).toHaveURL(/view=review/);
+    const form = admin.getByRole("main").locator("form").filter({ has: admin.getByLabel("審査理由", { exact: true }) });
     await form.getByLabel("審査理由").fill(reason);
     await form.getByRole("checkbox").check();
     await form.getByRole("button", { name: decision, exact: true }).click();
@@ -49,6 +57,8 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
       general.getByText("システム管理者の権限が必要です", { exact: true }),
     ).toBeVisible();
     await general.goto("/account/requests");
+    await general.getByRole("main").getByRole("link", { name: "業者ユーザーへの変更申請", exact: true }).click();
+    await expect(general).toHaveURL(/view=upgrade/);
     await general.getByLabel("業者としての表示名").fill("承認対象の担当者");
     await general
       .getByLabel("変更を申請する理由")
@@ -71,6 +81,8 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
     await expect(
       general.getByText("業者ユーザーとして利用しています。", { exact: false }),
     ).toBeVisible();
+    await general.getByRole("main").getByRole("link", { name: "企業・プロファイルの作成申請", exact: true }).click();
+    await expect(general).toHaveURL(/view=new-company/);
     const companyForm = general
       .getByRole("region", { name: "企業・プロファイルの作成申請" })
       .locator("form");
@@ -95,11 +107,16 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
       "企業情報を確認しました",
     );
     await general.reload();
-    await expect(
-      general
-        .getByRole("region", { name: "所属する企業" })
-        .getByText("ブラウザ確認企業", { exact: true }),
-    ).toBeVisible();
+    await general.getByRole("main").getByRole("link", { name: "所属する企業", exact: true }).click();
+    await expect(general).toHaveURL(/view=companies/);
+    const company = general.getByRole("region", { name: "所属する企業", exact: true })
+      .getByRole("link", { name: "ブラウザ確認企業", exact: true });
+    await expect(company).toBeVisible();
+    await company.click();
+    await expect(general).toHaveURL(/view=company&/);
+    await expect(general.getByRole("region", { name: "ブラウザ確認企業", exact: true })).toContainText("ブラウザ確認株式会社");
+    await general.getByRole("main").getByRole("link", { name: "この企業のプロファイル変更を申請", exact: true }).click();
+    await expect(general).toHaveURL(/view=profile/);
     const profileForm = general
       .getByRole("region", { name: "ブラウザ確認企業 のプロファイル変更申請" })
       .locator("form");
@@ -107,6 +124,8 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
     await profileForm
       .getByRole("button", { name: "プロファイル変更を申請", exact: true })
       .click();
+    await expect(general.getByText("処理を完了しました。最新の状態を確認してください。")).toBeVisible();
+    await expect(general.getByText("この企業のプロファイル変更は承認待ちです。")).toBeVisible();
     await review(
       admin,
       "企業プロファイル変更 / general@management.example.com",
@@ -114,9 +133,12 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
       "正式な企業名を再確認してください",
     );
     await general.reload();
-    await general
-      .getByText("企業プロファイル変更 / 拒否", { exact: true })
-      .click();
+    await expect(general.getByLabel("企業の表示名", { exact: true })).toHaveValue("ブラウザ確認企業");
+    await general.getByRole("main").getByRole("link", { name: "自分の申請履歴", exact: true }).click();
+    const rejected = general.getByRole("row").filter({ hasText: "拒否" })
+      .filter({ has: general.getByRole("link", { name: "企業プロファイル変更", exact: true }) });
+    await rejected.getByRole("link", { name: "企業プロファイル変更", exact: true }).click();
+    await expect(general).toHaveURL(/view=detail/);
     await expect(
       general.getByText("審査理由：正式な企業名を再確認してください", {
         exact: true,
@@ -126,6 +148,9 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
     await admin
       .getByRole("link", { name: "承認対象の担当者", exact: true })
       .click();
+    await expect(admin).toHaveURL(/view=detail/);
+    await admin.getByRole("main").getByRole("link", { name: "ユーザー情報を編集", exact: true }).click();
+    await expect(admin).toHaveURL(/view=edit/);
     await expect(admin.getByLabel("表示名", { exact: true })).toHaveValue(
       "承認対象の担当者",
     );
@@ -143,7 +168,10 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
         ),
         path,
       ).toBe(true);
-      await expect(admin.locator('a[aria-current="page"]')).toHaveCount(1);
+      await admin.getByRole("button", { name: "メニューを開く", exact: true }).click();
+      const drawer = admin.getByRole("dialog", { name: "メインナビゲーション" });
+      await expect(drawer.getByRole("navigation").locator('a[aria-current="page"]')).toHaveCount(1);
+      await admin.keyboard.press("Escape");
     }
     expect(errors).toEqual([]);
   } finally {
