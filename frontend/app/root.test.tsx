@@ -19,11 +19,11 @@ describe("ErrorBoundary", () => {
 
     expect(screen.getByRole("heading", { name: "404" })).toBeInTheDocument();
     expect(
-      screen.getByText("The requested page could not be found."),
+      screen.getByText("対象が見つかりません。"),
     ).toBeInTheDocument();
   });
 
-  it("displays the status text of other route errors", () => {
+  it("uses a translated message instead of exposing server status text", () => {
     render(
       <ErrorBoundary
         error={{
@@ -36,16 +36,13 @@ describe("ErrorBoundary", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Error" })).toBeInTheDocument();
-    expect(screen.getByText("Service Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Service Unavailable")).not.toBeInTheDocument();
   });
 
   it("provides a fallback for unknown errors", () => {
     render(<ErrorBoundary error={null} params={{}} />);
 
-    expect(screen.getByRole("heading", { name: "Oops!" })).toBeInTheDocument();
-    expect(
-      screen.getByText("An unexpected error occurred."),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading")).toBeInTheDocument();
+    expect(screen.queryByText("Oops!")).not.toBeInTheDocument();
   });
 });

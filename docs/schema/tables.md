@@ -4,6 +4,7 @@ Issue #15 のスキーマ設計をもとに、要件定義書 [design.md](../des
 
 - 初期 DDL: [000001_init.up.sql](../../backend/db/migrations/000001_init.up.sql)（PostgreSQL 14 以上）
 - 保存日数設定の廃止: [000002_remove_retention_policies.up.sql](../../backend/db/migrations/000002_remove_retention_policies.up.sql)
+- ユーザー・企業・申請管理: [000005_user_company_requests.up.sql](../../backend/db/migrations/000005_user_company_requests.up.sql)
 - Firebase移行: [000004_firebase_auth.up.sql](../../backend/db/migrations/000004_firebase_auth.up.sql)
 - 旧Google認証とセッション: [000003_google_auth.up.sql](../../backend/db/migrations/000003_google_auth.up.sql)
 - ER 図: [er.md](er.md)
@@ -83,7 +84,9 @@ Issue #15 のスキーマ設計をもとに、要件定義書 [design.md](../des
 
 | 表 | 役割 |
 | --- | --- |
-| `auth.users` | Firebaseプロジェクトの`issuer`とUID（`subject`）で識別する本人。旧Google識別子も履歴として保持 |
+| `auth.users` | Firebaseプロジェクトの`issuer`とUID（`subject`）で識別する本人。一般・業者区分、表示名、利用状態、編集の版番号も保持。旧Google識別子は履歴として保持 |
+| `auth.management_requests` | 業者変更、企業作成、企業プロファイル変更の申請。内容・審査者・理由を保持し審査後は変更不可 |
+| `app.company_profiles` | 企業の正式名称・紹介・連絡先・業態と、編集競合を検出する版番号 |
 | `auth.staff_links` | 本人と既存担当者の明示的な対応。顧客・担当者の複合外部キーと、有効な紐付けの一意制約を持つ |
 | `auth.sessions` | ユーザー、選択中の担当者、FirebaseセッションCookieのハッシュ、CSRFハッシュ、有効期限、失効日時 |
 | `auth.login_challenges` | 一回限りのログインCSRFチャレンジと、ブラウザーとの結び付けのハッシュ |
@@ -129,7 +132,7 @@ Tapyrus に送る署名済みのトランザクションは、送る前に `anch
 
 ## テーブル一覧
 
-`000004` 適用後は全部で 51 テーブルです（`app` 40、`integrity` 4、`audit` 1、`auth` 6）。列の詳細は DDL を見てください。
+`000005` 適用後は全部で 53 テーブルです（`app` 41、`integrity` 4、`audit` 1、`auth` 7）。列の詳細は DDL を見てください。
 
 ### 組織と権限
 
@@ -282,7 +285,7 @@ Tapyrus に送る署名済みのトランザクションは、送る前に `anch
 | ロール | 権限 |
 | --- | --- |
 | マイグレーション用 | スキーマの変更。アプリの実行時には使わない |
-| アプリ用 | `app` の読み書き。`auth.users`・`auth.login_challenges`・`auth.sessions` の認証処理に必要な読み書きと、`auth.staff_links` の SELECT。`audit` と `integrity.verification_runs` は INSERT と SELECT だけ。TRUNCATE はどの表にも渡さない |
+| アプリ用 | `app` の読み書き。`auth.users`・`auth.login_challenges`・`auth.sessions` の認証処理に必要な読み書きと、`auth.staff_links`・`auth.management_requests` の管理処理に必要な読み書き。`audit` と `integrity.verification_runs` は INSERT と SELECT だけ。TRUNCATE はどの表にも渡さない |
 | 認証の紐付け運用用 | `auth-link`で`auth.users`と`auth.staff_links`を登録・取消しし、`audit.events`へ追記する。通常の業務APIには紐付け変更を公開しない |
 | 登録処理用 | `integrity.anchors`、`integrity.anchor_transactions`、`integrity.anchor_attempts` の読み書き。外部登録のワーカーだけが使う |
 | 閲覧用 | 監査や調査のための SELECT だけ |

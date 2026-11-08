@@ -1,0 +1,27 @@
+.management-main {
+  width: min(100%, 1160px);
+  padding: 24px 24px 64px;
+  margin: 0 auto;
+  color-scheme: inherit;
+  overflow-wrap: anywhere;
+}
+.global-display-controls { display: flex; align-items: center; gap: 8px; }
+.global-display-button { display: inline-flex; align-items: center; justify-content: center; width: var(--ui-control-size); height: var(--ui-control-size); min-width: var(--ui-control-size); min-height: var(--ui-control-size); flex-shrink: 0; border: 1px solid var(--ui-border); border-radius: 100px; background: var(--ui-surface); color: var(--ui-text); font: 700 15px/1.5 var(--font-sans); cursor: pointer; }
+.global-display-button:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px; }
+.dashboard-title { font-family: "Zen Dots", var(--font-sans); }
+.dashboard-title { font-size: clamp(1.65rem, 4vw, 2rem); font-weight: 700; }
+/* Small layout helpers shared by management screens. */
+.mt-4 { margin-top: 1rem; }
+.mt-5 { margin-top: 1.25rem; }
+.mb-3 { margin-bottom: .75rem; }
+.mb-2 { margin-bottom: .5rem; }
+.gap-2 { gap: .5rem; }
+.gap-3 { gap: .75rem; }
+.font-semibold { font-weight: 600; }
+.inline { display: inline; }
+.cursor-pointer { cursor: pointer; }
+.w-full { width: 100%; }
+.h-40 { height: 10rem; }
+.object-cover { object-fit: cover; }
+.error-page { padding: 4rem 1rem 1rem; max-width: 80rem; margin-inline: auto; }
+.error-stack { width: 100%; padding: 1rem; overflow-x: auto; }

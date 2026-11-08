@@ -104,6 +104,7 @@ func (s *Service) Register(e *echo.Echo) {
 	g.GET("/me", s.me)
 	g.POST("/logout", s.logout)
 	g.POST("/membership", s.selectMembership)
+	s.registerManagement(e)
 	e.GET("/api/admin/context", func(c *echo.Context) error {
 		c.Response().Header().Set("Cache-Control", "no-store")
 		a, err := s.Authenticate(c.Request())

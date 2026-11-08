@@ -1,0 +1,18 @@
+.page { display: flex; align-items: center; justify-content: center; padding: 4rem 0 1rem; }
+.content { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 4rem; min-height: 0; }
+.header { display: flex; flex-direction: column; align-items: center; gap: 2.25rem; }
+.logoFrame { width: 500px; max-width: 100vw; padding: 1rem; }
+.logoLight { display: block; width: 100%; }
+.logoDark { display: none; width: 100%; }
+.resources { max-width: 300px; width: 100%; padding-inline: 1rem; }
+.resources > * + * { margin-top: 1.5rem; }
+.login { display: block; border-radius: .25rem; background: var(--ui-accent); padding: .75rem; text-align: center; color: var(--ui-on-accent); }
+.navigation { border-radius: 1.5rem; border: 1px solid var(--ui-border); padding: 1.5rem; }
+.navigation > * + * { margin-top: 1rem; }
+.prompt { line-height: 1.5rem; color: var(--ui-muted); text-align: center; }
+.resourceLink { display: flex; align-items: center; gap: .75rem; align-self: stretch; padding: .75rem; line-height: 1.5; color: var(--ui-link); }
+.resourceLink:hover { text-decoration: underline; }
+.icon { stroke: var(--ui-muted); }
+.resourceLink:hover .icon { stroke: currentColor; }
+:global(html[data-theme="dark"]) .logoLight { display: none; }
+:global(html[data-theme="dark"]) .logoDark { display: block; }

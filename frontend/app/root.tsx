@@ -5,10 +5,22 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
+  useRouteLoaderData,
 } from "react-router";
+import {
+  DisplayControls,
+  DisplaySettingsProvider,
+  useDisplaySettings,
+  useTranslation,
+} from "./components/ui/display-settings";
+import { requireSession, sessionHeaders, type SessionView } from "./lib/auth.server";
+import { AuthenticatedLayout } from "./components/templates/authenticated-layout";
+import { settingsNavigation } from "./features/settings/navigation";
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import styles from "./app.module.css";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -23,9 +35,42 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+export const headers = sessionHeaders;
+export async function loader({ request }: Route.LoaderArgs) {
+  const cookies = request.headers.get("Cookie") || "";
+  const pathname = new URL(request.url).pathname;
+  let session: SessionView | null = null;
+  if (!pathname.startsWith("/preview") && pathname !== "/login" && cookies) {
+    try { session = (await requireSession(request)).session; }
+    // Route loaders enforce authentication; display preferences must also survive
+    // a session-service failure so their error boundaries use the selected locale.
+    catch { session = null; }
+  }
+  return {
+    session,
+    language: /(?:^|;\s*)mt_locale=en(?:;|$)/.test(cookies)
+      ? ("en" as const)
+      : ("ja" as const),
+    theme: /(?:^|;\s*)mt_theme=dark(?:;|$)/.test(cookies)
+      ? ("dark" as const)
+      : ("light" as const),
+  };
+}
 export function Layout({ children }: { children: React.ReactNode }) {
+  const settings = useRouteLoaderData<typeof loader>("root");
   return (
-    <html lang="ja">
+    <DisplaySettingsProvider
+      initialLanguage={settings?.language ?? "ja"}
+      initialTheme={settings?.theme ?? "light"}
+    >
+      <Document>{children}</Document>
+    </DisplaySettingsProvider>
+  );
+}
+function Document({ children }: { children: React.ReactNode }) {
+  const { language, theme } = useDisplaySettings();
+  return (
+    <html lang={language} data-theme={theme}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -42,34 +87,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  const { pathname } = useLocation();
+  const root = useRouteLoaderData<typeof loader>("root");
+  const t = useTranslation();
+  const shared = /^\/(account|settings|admin)(\/|$)/.test(pathname);
+  return shared ? <AuthenticatedLayout session={root?.session} groups={settingsNavigation(t, root?.session)} title={t(pathname.startsWith("/admin") ? "navigation.systemAdmin" : pathname.startsWith("/account/requests") ? "navigation.requests" : pathname === "/account" ? "navigation.account" : pathname === "/settings/display" ? "navigation.display" : "navigation.settings")}><Outlet /></AuthenticatedLayout> : <Outlet />;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
-  let stack: string | undefined;
-
-  if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
-    details =
-      error.status === 404
-        ? "The requested page could not be found."
-        : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
-  }
+  const t = useTranslation();
+  const notFound = isRouteErrorResponse(error) && error.status === 404;
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full p-4 overflow-x-auto">
-          <code>{stack}</code>
-        </pre>
-      )}
+    <main className={styles["error-page"]}>
+      <DisplayControls />
+      <h1>{notFound ? "404" : t("error.unexpected")}</h1>
+      <p>{t(notFound ? "error.notFound" : "error.retry")}</p>
     </main>
   );
 }

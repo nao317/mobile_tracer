@@ -1,0 +1,69 @@
+export const copy = {
+  ja: {
+    dark: "ダークテーマに切り替え",
+    light: "ライトテーマに切り替え",
+    settings: "表示設定",
+    login: "ログイン",
+    register: "新規登録",
+    create: "アカウント登録",
+    reset: "再設定メールを送信",
+    tabs: "アカウントへのアクセス",
+    emailLabel: "ログインID",
+    email: "メールアドレス",
+    password: "パスワード",
+    busy: "処理中…",
+    google: "Googleでログイン",
+    googleRegister: "Googleで登録",
+    forgot: "パスワードを忘れた場合",
+    back: "ログインに戻る",
+    resetTitle: "パスワードの再設定",
+    home: "ホームへ",
+    unavailable:
+      "ログインの準備ができていません。管理者にお問い合わせください。",
+    verification:
+      "確認メールを送信しました。メール内のリンクで確認を完了し、再度ログインしてください。",
+    resetSent: "登録されたアドレスには、パスワード再設定のメールが届きます。",
+    cancelled: "ログインがキャンセルされました。",
+    authUnavailable: "現在ログインを利用できません。",
+    popup: "ポップアップを許可してから、もう一度お試しください。",
+    weak: "パスワードが要件を満たしていません。管理者が設定したパスワードポリシーを確認してください。",
+    rate: "試行回数が多いため、しばらく待ってからお試しください。",
+    failed: "認証できませんでした。入力内容とログイン方法を確認してください。",
+  },
+  en: {
+    dark: "Switch to dark theme",
+    light: "Switch to light theme",
+    settings: "Display settings",
+    login: "Sign in",
+    register: "Sign up",
+    create: "Create account",
+    reset: "Send reset email",
+    tabs: "Account access",
+    emailLabel: "Email address",
+    email: "Email address",
+    password: "Password",
+    busy: "Please wait…",
+    google: "Sign in with Google",
+    googleRegister: "Sign up with Google",
+    forgot: "Forgot password?",
+    back: "Back to sign in",
+    resetTitle: "Reset your password",
+    home: "Back to home",
+    unavailable:
+      "Sign-in is not available yet. Please contact your administrator.",
+    verification:
+      "Verification email sent. Follow the link in your email, then sign in again.",
+    resetSent:
+      "If this address is registered, you will receive a password reset email.",
+    cancelled: "Sign-in was cancelled.",
+    authUnavailable: "Sign-in is currently unavailable.",
+    popup: "Allow pop-ups, then try again.",
+    weak: "Your password does not meet the requirements. Check the password policy set by your administrator.",
+    rate: "Too many attempts. Please wait and try again.",
+    failed: "Authentication failed. Check your details and sign-in method.",
+  },
+} as const;
+export type Language = keyof typeof copy;
+export type Theme = "light" | "dark";
+export type Failure =
+  "cancelled" | "authUnavailable" | "popup" | "weak" | "rate" | "failed" | "";

@@ -1,0 +1,6 @@
+.home { display: grid; gap: 2rem; }
+.primary { display: flex; flex-wrap: wrap; gap: .75rem; }
+.primaryLink { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .75rem 1.25rem; border-radius: .5rem; color: var(--ui-on-accent); background: var(--ui-accent); font-weight: 600; }
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 2rem; }
+.groups h2 { font-size: 1rem; font-weight: 600; padding-bottom: .5rem; border-bottom: 1px solid var(--ui-border); margin-bottom: .5rem; }
+.link { display: inline-flex; align-items: center; min-height: 44px; padding-block: .5rem; color: var(--ui-link, var(--ui-accent)); text-decoration: underline; text-underline-offset: .2em; }
