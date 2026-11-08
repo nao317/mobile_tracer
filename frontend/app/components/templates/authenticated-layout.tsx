@@ -99,7 +99,13 @@ export function AuthenticatedLayout({ children, groups, session, title }: { chil
         }}
       >{title && <h1 className={styles.status}>{title}</h1>}{children}</main>
     </div>
-    <dialog ref={dialog} id="mobile-navigation" className={styles.dialog} aria-label={t("navigation.main")} onClose={() => { setDrawerOpen(false); document.body.style.overflow = ""; if (restoreToggle.current) toggle.current?.focus(); else main.current?.focus(); }} onClick={event => { if (event.target === event.currentTarget && event.clientX >= event.currentTarget.getBoundingClientRect().right) close(); }}>
+    <dialog ref={dialog} id="mobile-navigation" className={styles.dialog} aria-label={t("navigation.main")} onKeyDown={event => {
+      if (event.key !== "Tab") return;
+      const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]')].filter(element => element.getClientRects().length > 0);
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }} onClose={() => { setDrawerOpen(false); document.body.style.overflow = ""; if (restoreToggle.current) toggle.current?.focus(); else main.current?.focus(); }} onClick={event => { if (event.target === event.currentTarget && event.clientX >= event.currentTarget.getBoundingClientRect().right) close(); }}>
       <div className={styles.drawerClose}><button type="button" className={styles.iconButton} aria-label={t("navigation.closeMenu")} onClick={close}><X size={22} aria-hidden="true" /></button></div>
       <div className={styles.sidebar}>{navigation("mobile")}{account()}</div>
     </dialog>

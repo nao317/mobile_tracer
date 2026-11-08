@@ -14,6 +14,7 @@ export function createManagementFixture() {
   }));
   const requests = [],
     companies = [];
+  const initialGeneral = structuredClone(users[0]);
   const owned = new Map();
   const session = (role) => ({
     user: users[role === "admin" ? 1 : 0],
@@ -27,6 +28,16 @@ export function createManagementFixture() {
     pagination: { page: 1, page_size: 20, total: rows.length },
   });
   return {
+    resetGeneral() {
+      users[0] = structuredClone(initialGeneral);
+      for (let i = requests.length - 1; i >= 0; i--)
+        if (requests[i].requester_id === users[0].id) requests.splice(i, 1);
+      for (let i = companies.length - 1; i >= 0; i--)
+        if (owned.get(companies[i].id) === users[0].id) {
+          owned.delete(companies[i].id);
+          companies.splice(i, 1);
+        }
+    },
     session,
     async handle(request, url, send, role) {
       if (

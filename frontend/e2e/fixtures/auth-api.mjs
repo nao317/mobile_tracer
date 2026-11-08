@@ -35,6 +35,10 @@ const server = createServer(async (request, response) => {
     response.statusCode = status;
     response.end(JSON.stringify(data));
   };
+  if (request.method === "POST" && url.pathname === "/__fixture/reset-management") {
+    management.resetGeneral();
+    return send({ status: "ok" });
+  }
   if (request.method === "GET" && request.url === "/api/auth/config") {
     response.end(JSON.stringify({ data: config }));
   } else if (request.method === "GET" && request.url === "/health") {
@@ -178,7 +182,7 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(18781, "127.0.0.1");
+server.listen(Number(process.env.PLAYWRIGHT_FIXTURE_PORT || "18781"), "127.0.0.1");
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.once(signal, () => server.close());
 }

@@ -17,6 +17,7 @@ export function settingsNavigation(t: ReturnType<typeof useTranslation>, session
       { id: "company", label: t("entry.myCompanies"), to: "/account/requests?view=companies" },
     ] },
     ...(session?.system_admin ? [{ id: "system", label: t("navigation.systemAdmin"), items: [
+      { id: "admin", label: t("navigation.systemAdmin"), to: "/admin" },
       { id: "users", label: t("navigation.users"), to: "/admin/users" },
       { id: "companies", label: t("navigation.companies"), to: "/admin/companies" },
       { id: "review", label: t("navigation.review"), to: "/admin/requests" },

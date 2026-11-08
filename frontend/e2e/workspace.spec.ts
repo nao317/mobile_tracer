@@ -5,7 +5,7 @@ import { demoCaseIds, demoId } from "../app/features/workspace/preview-data";
 
 async function navigateInSidebar(page: Page, href: string) {
   const navigation = page.getByRole("navigation", { name: "メインナビゲーション" });
-  const link = navigation.locator(`a[href="${href}"]`);
+  const link = navigation.locator(`a[href="${href}"], a[href^="${href}?"]`);
   if (!(await link.isVisible())) {
     await link.locator("..").locator("..").getByRole("button").click();
   }
@@ -199,13 +199,13 @@ test.describe("UI preview", () => {
       .getByLabel("表示状態", { exact: true })
       .selectOption("forbidden");
     await expect(
-      page.getByRole("heading", { name: "表示する権限がありません" }),
+      page.getByRole("heading", { name: "この操作を行う権限がありません。" }),
     ).toBeVisible();
     await page.getByLabel("表示状態", { exact: true }).selectOption("normal");
     await expect(page.getByRole("main").getByRole("link", { name: "車両を登録", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("main")).not.toContainText("表示する権限がありません");
+    await expect(page.getByRole("main")).not.toContainText("この操作を行う権限がありません。");
   });
-  test("desktop overview has a complete navigation and review entry", async ({
+  test("desktop home shows history and keeps page links in the sidebar", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -213,9 +213,11 @@ test.describe("UI preview", () => {
     await expect(
       page.getByRole("navigation", { name: "メインナビゲーション" }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("main").getByRole("link", { name: "案件", exact: true }).first(),
-    ).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: "操作履歴" })).toBeVisible();
+    const navigation = page.getByRole("navigation", { name: "メインナビゲーション" });
+    await navigation.getByRole("button", { name: "案件", exact: true }).click();
+    await expect(navigation.getByRole("link", { name: "案件", exact: true })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: "案件", exact: true })).toHaveCount(0);
     await page.screenshot({
       path: "/tmp/mobile-tracer-desktop.png",
       fullPage: true,
@@ -267,6 +269,10 @@ test.describe("UI preview", () => {
     await page.getByRole("main").getByRole("link", { name: "撮影一覧", exact: true }).click();
     await expect(page.getByRole("img", { name: "正面の撮影原本", exact: true })).toBeVisible();
     await page.getByRole("main").getByRole("link", { name: "送信を再試行", exact: true }).click();
+    await page.getByLabel("写真原本", { exact: true }).setInputFiles({
+      name: "sample.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5S0AAAAASUVORK5CYII=", "base64"),
+    });
     await page.getByLabel("送信失敗の表示を試す（プレビュー用）").check();
     await page.getByRole("button", { name: "写真をプレビューに反映" }).click();
     await page.getByRole("main").getByRole("link", { name: "撮影一覧", exact: true }).click();

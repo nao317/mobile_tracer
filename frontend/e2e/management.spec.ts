@@ -3,6 +3,7 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 test("申請、管理者の承認、企業作成、拒否とユーザー管理", async ({
   browser,
   baseURL,
+  request,
 }) => {
   test.setTimeout(60_000);
   test.skip(
@@ -12,6 +13,8 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
     "Loopback UI fixture only; actual API behavior has PostgreSQL integration tests.",
   );
   const contexts: BrowserContext[] = [];
+  const reset = await request.post(`http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT || "18781"}/__fixture/reset-management`);
+  expect(reset.ok()).toBe(true);
   const errors: string[] = [];
   async function rolePage(role: string) {
     const context = await browser.newContext({
@@ -79,7 +82,7 @@ test("申請、管理者の承認、企業作成、拒否とユーザー管理",
     );
     await general.reload();
     await expect(
-      general.getByText("業者ユーザーとして利用しています。", { exact: false }),
+      general.getByText("業者ユーザーへの変更は承認済みです。", { exact: true }),
     ).toBeVisible();
     await general.getByRole("main").getByRole("link", { name: "企業・プロファイルの作成申請", exact: true }).click();
     await expect(general).toHaveURL(/view=new-company/);

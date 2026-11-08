@@ -109,7 +109,7 @@ for (const language of ["ja", "en"] as const) {
 }
 
 async function seedManagementViews(request: APIRequestContext, origin: string, name: string) {
-  const fixtureURL = "http://127.0.0.1:18781";
+  const fixtureURL = `http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT || "18781"}`;
   async function post(path: string, body: object) {
     const response = await request.post(fixtureURL + path, {
       headers: { Origin: origin, "X-CSRF-Token": "fixture-csrf" }, data: body,

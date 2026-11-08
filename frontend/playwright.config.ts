@@ -5,7 +5,7 @@ const useAuthFixture =
   !externalURL &&
   !process.env.API_INTERNAL_URL &&
   process.env.TEST_FIREBASE_BROWSER !== "1";
-const authFixtureURL = "http://127.0.0.1:18781";
+const authFixtureURL = `http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT || "18781"}`;
 
 export default defineConfig({
   testDir: "./e2e",
