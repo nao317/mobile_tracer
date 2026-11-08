@@ -14,11 +14,29 @@ test("the home page redirects guests to the dashboard with sign-in options", asy
   await expect(
     page.getByRole("link", { name: "ログイン", exact: true }),
   ).toHaveAttribute("href", "/login");
-  await page.getByRole("link", { name: "新規登録" }).click();
-  await expect(page.getByRole("tab", { name: "新規登録" })).toHaveAttribute(
-    "aria-selected",
-    "true",
+  await expect(page.getByRole("link", { name: "新規登録" })).toHaveAttribute(
+    "href", "/login?mode=register",
   );
+  let authEnabled = true;
+  if (process.env.PLAYWRIGHT_BASE_URL) {
+    const config = await page.request.get("/api/auth/config");
+    expect(config.ok()).toBe(true);
+    const { data } = await config.json();
+    expect(typeof data.enabled).toBe("boolean");
+    authEnabled = data.enabled;
+  }
+  await page.getByRole("link", { name: "新規登録" }).click();
+  await expect(page).toHaveURL(/\/login\?mode=register$/);
+  if (authEnabled) {
+    await expect(page.getByRole("tab", { name: "新規登録" })).toHaveAttribute(
+      "aria-selected", "true",
+    );
+  } else {
+    await expect(page.getByRole("status")).toContainText(
+      "ログインの準備ができていません。管理者にお問い合わせください。",
+    );
+    await expect(page.getByRole("tab", { name: "新規登録" })).toHaveCount(0);
+  }
 });
 
 test("guest dashboard display preferences persist", async ({ page }) => {
