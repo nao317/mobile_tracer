@@ -74,7 +74,7 @@ export const caseSchema = z.object({
   configuration_version_id: idSchema,
   assignee_id: idSchema.nullable(),
   stage: z.string(),
-  status: z.enum(["in_progress", "completed", "cancelled"]),
+  status: z.enum(["awaiting_customer", "in_progress", "completed", "cancelled"]),
   created_by: idSchema,
   created_at: z.string(),
   cancel_reason: z.string().nullable().optional(),

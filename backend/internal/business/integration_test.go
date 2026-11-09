@@ -236,9 +236,21 @@ func TestBusinessPostgres(t *testing.T) {
 			t.Fatal("explicit null was not applied")
 		}
 		c := newCase(t, admin, vehicle.ID)
-		if c.Stage != "intake" || c.Status != "in_progress" {
+		if c.Stage != "intake" || c.Status != "awaiting_customer" {
 			t.Fatalf("incorrect initial case state: %+v", c)
 		}
+
+		request(t, admin, "PATCH", "/api/cases/"+c.ID, `{"stage":"inspection"}`, 409)
+		request(t, admin, "POST", "/api/cases/"+c.ID+"/records", `{"record_kind":"inspection"}`, 409)
+		// The remaining assertions exercise CRUD on a historical active case.
+		// New-case acceptance and event-gated transitions have their own
+		// customer-authenticated lifecycle integration tests.
+		var legacy business.Case
+		if err := db.Raw(`INSERT INTO app.cases(tenant_id,store_id,vehicle_id,case_type,configuration_version_id,assignee_id,stage,created_by,status)
+          SELECT tenant_id,store_id,vehicle_id,case_type,configuration_version_id,assignee_id,stage,created_by,'in_progress' FROM app.cases WHERE id=? RETURNING *`, c.ID).Scan(&legacy).Error; err != nil {
+			t.Fatal(err)
+		}
+		c = legacy
 		request(t, staff, "GET", "/api/cases/"+c.ID, "", 404)
 		request(t, manager, "GET", "/api/cases/"+c.ID, "", 200)
 		request(t, admin, "PATCH", "/api/cases/"+c.ID, fmt.Sprintf(`{"assignee_id":%q,"stage":"inspection"}`, uid(103)), 200)

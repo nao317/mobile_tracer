@@ -13,8 +13,9 @@ import { useWorkspace } from "../workspace-context";
 export function CaseCreateScreen() {
   const { c, enumLabel, vehicleName, plateNumber } = useCoreI18n();
 
-  const { snapshot, base } = useWorkspace();
+  const { snapshot, base, mode } = useWorkspace();
   const [search] = useSearchParams();
+  if(mode==="live") return <Panel title="案件開始の提案"><Link to={`/casework/new${search.get("vehicle")?`?vehicle=${search.get("vehicle")}`:""}`}>顧客に開始条件を提示する</Link></Panel>;
   if (!canWrite(snapshot.context))
     return <EmptyState title={c("workspace.access.createCase")} />;
   if (

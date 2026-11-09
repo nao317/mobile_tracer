@@ -298,7 +298,7 @@ func parseList(query url.Values, kind string) (business.ListOptions, error) {
 				return o, business.Invalid(key, "業態が不正です。")
 			}
 			if key == "status" {
-				allowed := []string{"in_progress", "completed", "cancelled"}
+				allowed := []string{"awaiting_customer", "in_progress", "completed", "cancelled"}
 				if kind == "versions" {
 					allowed = []string{"draft", "submitted"}
 				}

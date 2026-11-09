@@ -7,6 +7,7 @@ import {
   ScrollRestoration,
   useLocation,
   useRouteLoaderData,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import {
   DisplayControls,
@@ -36,6 +37,10 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export const headers = sessionHeaders;
+// Session-dependent navigation must refresh when moving between shared routes.
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  return currentUrl.pathname !== nextUrl.pathname || defaultShouldRevalidate;
+}
 export async function loader({ request }: Route.LoaderArgs) {
   const cookies = request.headers.get("Cookie") || "";
   const pathname = new URL(request.url).pathname;
@@ -90,8 +95,8 @@ export default function App() {
   const { pathname } = useLocation();
   const root = useRouteLoaderData<typeof loader>("root");
   const t = useTranslation();
-  const shared = /^\/(account|settings|admin)(\/|$)/.test(pathname);
-  return shared ? <AuthenticatedLayout session={root?.session} groups={settingsNavigation(t, root?.session)} title={t(pathname.startsWith("/admin") ? "navigation.systemAdmin" : pathname.startsWith("/account/requests") ? "navigation.requests" : pathname === "/account" ? "navigation.account" : pathname === "/settings/display" ? "navigation.display" : "navigation.settings")}><Outlet /></AuthenticatedLayout> : <Outlet />;
+  const shared = /^\/(account|settings|admin|licenses)(\/|$)/.test(pathname);
+  return shared ? <AuthenticatedLayout session={root?.session} groups={settingsNavigation(t, root?.session)} title={t(pathname === "/licenses" ? "navigation.licenses" : pathname.startsWith("/admin") ? "navigation.systemAdmin" : pathname.startsWith("/account/requests") ? "navigation.requests" : pathname === "/account" ? "navigation.account" : pathname === "/settings/display" ? "navigation.display" : "navigation.settings")}><Outlet /></AuthenticatedLayout> : <Outlet />;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

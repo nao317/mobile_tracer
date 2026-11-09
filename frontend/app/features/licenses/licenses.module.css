@@ -1,0 +1,23 @@
+.catalog,
+.catalog section h2,
+.catalog section h3,
+.catalog pre {
+  font-family: "Google Sans", "M PLUS Rounded 1c", sans-serif;
+}
+
+.metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  overflow-wrap: anywhere;
+}
+
+.details { margin-top: 1rem; }
+.details summary { cursor: pointer; }
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: .8125rem;
+  line-height: 1.7;
+}

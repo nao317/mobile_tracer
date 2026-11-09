@@ -100,6 +100,7 @@ func (s *Service) registerManagement(e *echo.Echo) {
 		})
 	}
 	me := group("/api/me", false)
+	me.GET("/history", s.listTransactionHistory)
 	admin := group("/api/admin", true)
 	me.GET("/requests", func(c *echo.Context) error { return s.listRequests(c, managementActor(c).User.ID) })
 	me.POST("/requests", func(c *echo.Context) error {
