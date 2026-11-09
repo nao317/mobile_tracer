@@ -7,6 +7,9 @@ Issue #15 のスキーマ設計をもとに、要件定義書 [design.md](../des
 - ユーザー・企業・申請管理: [000005_user_company_requests.up.sql](../../backend/db/migrations/000005_user_company_requests.up.sql)
 - Firebase移行: [000004_firebase_auth.up.sql](../../backend/db/migrations/000004_firebase_auth.up.sql)
 - 旧Google認証とセッション: [000003_google_auth.up.sql](../../backend/db/migrations/000003_google_auth.up.sql)
+- 写真保存・顧客確認: [000006_customer_workflow.up.sql](../../backend/db/migrations/000006_customer_workflow.up.sql)
+- 案件開始承認・作業履歴・API登録キュー: [000007_case_lifecycle.up.sql](../../backend/db/migrations/000007_case_lifecycle.up.sql)
+- 追加テーブルの一括削除防止・作成日時: [000008_workflow_history_guards.up.sql](../../backend/db/migrations/000008_workflow_history_guards.up.sql)
 - ER 図: [er.md](er.md)
 
 要件の変更は先に design.md を改訂します。この文書の内容で要件を確定させません。
@@ -64,6 +67,19 @@ Issue #15 のスキーマ設計をもとに、要件定義書 [design.md](../des
 - `_id` で終わる列は、すべて本当の外部キーです。構成版の中の項目名のように外部キーにできない識別子は `_key` で終わらせます（`item_key`、`spot_key`、`statement_key`）。
 - 配列の列は使いません。一対多は子の表にします。
 - `jsonb` は、形が顧客や外部サービスごとに変わるものだけに使います（`definition`、`settings`、`payload`、`value`、`vehicle_snapshot`、`details`、`response`）。
+
+Migration 6・7で追加した表には、次の例外があります。スキーマ検査もこの参照だけを例外とし、ほかの列や表には通常の規則を適用します。
+
+| 対象 | 理由 |
+| --- | --- |
+| `case_stage_executions.transaction_id` | PostgreSQLの `txid_current()` の値。同じDBトランザクション内での作業実行を確認する識別子であり、業務テーブルの行を指さない |
+| `api_registrations.timestamp_id` | Tapyrus APIが発行する外部の登録識別子 |
+| `api_registrations.subject_id` | `subject_type` により記録版・案件開始依頼・案件イベントを指し分ける。登録対象はアプリで確認し、登録対象の変更はDBトリガーで拒否する |
+| `workflow_presentations.version_id` | 案件は、外部キーで参照する記録版から一意に決まるため、`case_id` を重複して持たない |
+| `case_start_responses.request_id` | 案件は、外部キーで参照する変更不可の開始依頼から一意に決まる |
+| `case_event_actions.event_id` | 案件は、外部キーで参照する変更不可のイベントから一意に決まる |
+
+Migration 8で `workflow_requests` と `api_registrations` に `created_at` を追加します。既存の確認依頼には提示版の作成日時を、既存のAPI登録キューには保持されている `updated_at` を補います。後者は作成当時の正確な日時を復元するものではありません。追加後の行にはDBの現在時刻を記録し、作成日時の変更を禁止します。
 
 ### 同じ事実を二か所に持つところ
 

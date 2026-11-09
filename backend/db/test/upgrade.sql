@@ -112,3 +112,57 @@ SELECT pg_temp.assert_true('未所属ユーザーは一般のまま',
 SELECT pg_temp.assert_true('管理機能の移行でも所属と監査履歴を保持する',
  NOT EXISTS(SELECT * FROM old_auth_links EXCEPT SELECT * FROM auth.staff_links)
  AND NOT EXISTS(SELECT * FROM old_audit EXCEPT SELECT * FROM audit.events));
+
+-- 追加の保護を適用しても、顧客承認済み・API登録済みの履歴を保持する。
+\ir ../migrations/000006_customer_workflow.up.sql
+INSERT INTO app.workflow_presentations(version_id,content,content_hash,actor_id,created_at)
+VALUES(pg_temp.u('8001'),decode('00','hex'),repeat('e',64),pg_temp.u('ab01'),'2001-01-01');
+INSERT INTO app.workflow_requests(id,version_id,user_id,qualification,kind,statement,deadline)
+VALUES(pg_temp.u('ac01'),pg_temp.u('8001'),pg_temp.u('ab03'),'owner','state_agreement','車両状態を確認しました',now()+interval '1 day');
+INSERT INTO app.workflow_responses(request_id,actor_id,decision)
+VALUES(pg_temp.u('ac01'),pg_temp.u('ab03'),'approved');
+INSERT INTO app.workflow_anchors(version_id,manifest,manifest_hash)
+VALUES(pg_temp.u('8001'),decode('01','hex'),repeat('f',64));
+\ir ../migrations/000007_case_lifecycle.up.sql
+UPDATE integrity.api_registrations
+ SET status='confirmed',timestamp_id=42,txid=repeat('a',64),confirmed_at='2002-01-01',updated_at='2002-01-01'
+ WHERE subject_type='record' AND subject_id=pg_temp.u('8001');
+CREATE TEMP TABLE old_workflow_requests AS SELECT * FROM app.workflow_requests;
+CREATE TEMP TABLE old_api_registrations AS SELECT * FROM integrity.api_registrations;
+\ir ../migrations/000008_workflow_history_guards.up.sql
+SELECT pg_temp.assert_true('確認依頼の内容を保持し提示版の作成日時を補う',
+ EXISTS(SELECT 1 FROM app.workflow_requests q JOIN old_workflow_requests o ON o.id=q.id
+  WHERE q.id=pg_temp.u('ac01') AND to_jsonb(q)-'created_at'=to_jsonb(o) AND q.created_at='2001-01-01'));
+SELECT pg_temp.assert_true('確定済みAPI登録の内容を保持し旧更新日時を補う',
+ EXISTS(SELECT 1 FROM integrity.api_registrations r JOIN old_api_registrations o ON o.id=r.id
+  WHERE r.subject_type='record' AND r.subject_id=pg_temp.u('8001')
+   AND to_jsonb(r)-'created_at'=to_jsonb(o) AND r.created_at=o.updated_at));
+SELECT pg_temp.ng('移行後も確認依頼の作成日時を変更できない', $q$
+ UPDATE app.workflow_requests SET created_at=now() WHERE id=pg_temp.u('ac01') $q$,
+ 'P0001',expected_message=>'app.workflow_requests のこの行は変更・削除できません');
+-- queuedの行でも作成日時を保護する（confirmedの変更禁止だけには依存しない）。
+INSERT INTO app.case_events(id,case_id,actor_id,origin,kind,title,description,deadline,request_key)
+VALUES(pg_temp.u('ac02'),pg_temp.u('5001'),pg_temp.u('ab01'),'business','progress_report',
+ '経過報告','移行後の報告',now()+interval '1 day',pg_temp.u('ac03'));
+INSERT INTO integrity.api_registrations(subject_type,subject_id,manifest,manifest_hash)
+VALUES('event_approval',pg_temp.u('ac02'),decode('02','hex'),repeat('b',64));
+SELECT pg_temp.ng('未送信API登録の作成日時を変更できない', $q$
+ UPDATE integrity.api_registrations SET created_at=now()-interval '1 day'
+  WHERE subject_type='event_approval' AND subject_id=pg_temp.u('ac02') $q$,
+ 'P0001',expected_message=>'integrity.api_registrations の created_at は変更できません');
+SELECT pg_temp.ok('未送信API登録の送信状態は更新できる', $q$
+ UPDATE integrity.api_registrations SET status='submitting',attempts=attempts+1,updated_at=now()
+  WHERE subject_type='event_approval' AND subject_id=pg_temp.u('ac02') $q$);
+DO $$
+DECLARE t record;
+BEGIN
+ FOR t IN SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE c.relkind='r' AND ((n.nspname='app' AND (c.relname LIKE 'workflow_%' OR c.relname IN
+   ('case_start_requests','case_start_responses','case_events','case_event_actions','case_stage_executions')))
+   OR (n.nspname='integrity' AND c.relname='api_registrations'))
+ LOOP
+  PERFORM pg_temp.ng(format('移行後の %I.%I は一括削除できない',t.nspname,t.relname),
+   format('TRUNCATE %I.%I CASCADE',t.nspname,t.relname),
+   'P0001',expected_message=>format('%s.%s は TRUNCATE できません',t.nspname,t.relname));
+ END LOOP;
+END $$;

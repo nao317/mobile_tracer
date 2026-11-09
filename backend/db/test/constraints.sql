@@ -1120,8 +1120,44 @@ SELECT pg_temp.ok('新しい構成版を反映する', $q$
   UPDATE app.configuration_versions
      SET status = 'published', published_by = pg_temp.u('1a1'), published_at = now()
    WHERE id = pg_temp.u('3a5') $q$);
-SELECT pg_temp.ok('移行しない案件は旧版のまま進む', $q$
+-- 段階変更は、顧客の開始承認と承認済み作業の実行を経て行う。
+SELECT pg_temp.ng('開始承認前の案件の段階は変更できない', $q$
+  UPDATE app.cases SET stage = 'lending' WHERE id = pg_temp.u('5a2') $q$,
+  'P0001', expected_message => '案件開始承認前は進行できません');
+SELECT pg_temp.ng('顧客の開始承認なしで案件を進行中にできない', $q$
+  UPDATE app.cases SET status = 'in_progress' WHERE id = pg_temp.u('5a2') $q$,
+  'P0001', expected_message => '顧客の案件開始承認が必要です');
+SELECT pg_temp.ok('顧客が旧構成版の案件の開始を承認する', $q$
+  INSERT INTO auth.users (id, issuer, subject, account_type) VALUES
+    (pg_temp.u('ca01'), 'https://securetoken.google.com/demo-mobile-tracer', 'configuration-business', 'business'),
+    (pg_temp.u('ca02'), 'https://securetoken.google.com/demo-mobile-tracer', 'configuration-customer', 'general');
+  INSERT INTO app.case_start_requests
+    (id, case_id, version_no, customer_id, actor_id, terms, terms_hash, deadline, request_key)
+  VALUES (pg_temp.u('ca03'), pg_temp.u('5a2'), 1, pg_temp.u('ca02'), pg_temp.u('ca01'),
+          convert_to('{"configuration_version_id":"00000000-0000-0000-0000-0000000003a1"}', 'UTF8'),
+          repeat('a', 64), now() + interval '1 day', pg_temp.u('ca04'));
+  INSERT INTO app.case_start_responses (request_id, actor_id, decision)
+  VALUES (pg_temp.u('ca03'), pg_temp.u('ca02'), 'approved');
+  UPDATE app.cases SET status = 'in_progress' WHERE id = pg_temp.u('5a2') $q$);
+SELECT pg_temp.ng('開始承認後も作業実行なしで段階は変更できない', $q$
+  UPDATE app.cases SET stage = 'lending' WHERE id = pg_temp.u('5a2') $q$,
+  'P0001', expected_message => '承認済み作業の実行を通じて段階を変更してください');
+SELECT pg_temp.ok('旧構成版の案件の作業を顧客が承認する', $q$
+  INSERT INTO app.case_events
+    (id, case_id, actor_id, origin, kind, title, description, target_stage, deadline, request_key)
+  VALUES (pg_temp.u('ca05'), pg_temp.u('5a2'), pg_temp.u('ca01'), 'business', 'work',
+          '貸出', '旧構成版で貸出に進む', 'lending', now() + interval '1 day', pg_temp.u('ca06'));
+  INSERT INTO app.case_event_actions (event_id, actor_id, action, request_key, sequence)
+  VALUES (pg_temp.u('ca05'), pg_temp.u('ca02'), 'approved', pg_temp.u('ca07'), 1) $q$);
+SELECT pg_temp.ok('移行しない案件は承認済み作業の実行で旧版のまま進む', $q$
+  INSERT INTO app.case_event_actions (event_id, actor_id, action, request_key, sequence)
+  VALUES (pg_temp.u('ca05'), pg_temp.u('ca01'), 'executed', pg_temp.u('ca08'), 2);
+  INSERT INTO app.case_stage_executions (event_id, case_id, from_stage, to_stage)
+  VALUES (pg_temp.u('ca05'), pg_temp.u('5a2'), 'reception', 'lending');
   UPDATE app.cases SET stage = 'lending' WHERE id = pg_temp.u('5a2') $q$);
+SELECT pg_temp.assert_true('進行した案件は旧構成版を維持している',
+  EXISTS (SELECT 1 FROM app.cases WHERE id = pg_temp.u('5a2')
+    AND configuration_version_id = pg_temp.u('3a1') AND status = 'in_progress' AND stage = 'lending'));
 SELECT pg_temp.ng('移行しない案件で新しい構成版の記録版を作る', $q$
   INSERT INTO app.records (id, tenant_id, case_id, record_kind, created_by)
   VALUES (pg_temp.u('7a8'), pg_temp.u('a'), pg_temp.u('5a2'), 'x', pg_temp.u('1a1'));

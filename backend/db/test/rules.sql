@@ -8,6 +8,12 @@ SELECT '外部キーのない列' AS rule, c.table_schema || '.' || c.table_name
   FROM information_schema.columns c
  WHERE c.table_schema IN ('app', 'integrity', 'auth')
    AND (c.column_name ~ '_id$' OR c.column_name ~ '_by(_staff|_participant|_operator)?$')
+   -- These are PostgreSQL/API identifiers, or the typed polymorphic outbox
+   -- reference, rather than references to a single local table (tables.md).
+   AND (c.table_schema, c.table_name, c.column_name) NOT IN (
+     ('app', 'case_stage_executions', 'transaction_id'),
+     ('integrity', 'api_registrations', 'timestamp_id'),
+     ('integrity', 'api_registrations', 'subject_id'))
    AND NOT EXISTS (
      SELECT 1 FROM pg_constraint k
        JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = ANY (k.conkey)
@@ -26,6 +32,12 @@ SELECT DISTINCT 'case_id のない表', k.conrelid::regclass::text
    AND k.confrelid <> 'app.cases'::regclass
    AND EXISTS (SELECT 1 FROM pg_attribute a
                 WHERE a.attrelid = k.confrelid AND a.attname = 'case_id' AND NOT a.attisdropped)
+   -- These children inherit exactly one case through an immutable parent with
+   -- a globally unique key. Exempt only that relationship, not the whole table.
+   AND (k.conrelid, k.confrelid) NOT IN (
+     ('app.workflow_presentations'::regclass, 'app.record_versions'::regclass),
+     ('app.case_start_responses'::regclass, 'app.case_start_requests'::regclass),
+     ('app.case_event_actions'::regclass, 'app.case_events'::regclass))
    AND NOT EXISTS (SELECT 1 FROM pg_attribute a
                     WHERE a.attrelid = k.conrelid AND a.attname = 'case_id' AND NOT a.attisdropped)
 UNION ALL
