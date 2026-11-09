@@ -1,5 +1,6 @@
 .login-page {
-  --login-font: var(--font-sans);
+  /* Use Google Sans for Latin text; Japanese glyphs fall back to M PLUS. */
+  --login-font: "Google Sans", "M PLUS Rounded 1c", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --login-background: #fff;
   --login-foreground: #111827;
   --login-muted: #4b5563;

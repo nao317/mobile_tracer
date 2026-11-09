@@ -1,0 +1,13 @@
+[
+  {"name":"Node.js","version":"24","ecosystem":"infrastructure","license":"MIT and bundled third-party licenses","url":"https://nodejs.org/","licenseUrl":"https://raw.githubusercontent.com/nodejs/node/v24.x/LICENSE"},
+  {"name":"Go","version":"1.27.3","ecosystem":"infrastructure","license":"BSD-3-Clause","url":"https://go.dev/","licenseUrl":"https://raw.githubusercontent.com/golang/go/go1.27.3/LICENSE"},
+  {"name":"nginx","version":"1.30.6","ecosystem":"infrastructure","license":"BSD-2-Clause","url":"https://nginx.org/","licenseUrl":"https://raw.githubusercontent.com/nginx/nginx/release-1.30.6/LICENSE"},
+  {"name":"PostgreSQL","version":"17","ecosystem":"infrastructure","license":"PostgreSQL","url":"https://www.postgresql.org/","licenseUrl":"https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/COPYRIGHT"},
+  {"name":"cloudflared","version":"2026.10.7","ecosystem":"infrastructure","license":"Apache-2.0","url":"https://github.com/cloudflare/cloudflared","licenseUrl":"https://raw.githubusercontent.com/cloudflare/cloudflared/2026.10.7/LICENSE"},
+  {"name":"golang-migrate","version":"4.18.3","ecosystem":"infrastructure","license":"MIT","url":"https://github.com/golang-migrate/migrate","licenseUrl":"https://raw.githubusercontent.com/golang-migrate/migrate/v4.18.3/LICENSE"},
+  {"name":"Tapyrus Core","version":"0.7.2","ecosystem":"infrastructure","license":"MIT","url":"https://github.com/chaintope/tapyrus-core","licenseUrl":"https://raw.githubusercontent.com/chaintope/tapyrus-core/v0.7.2/COPYING"},
+  {"name":"Esplora Tapyrus","version":"0.5.8","ecosystem":"infrastructure","license":"MIT","url":"https://github.com/chaintope/esplora-tapyrus","licenseUrl":"https://raw.githubusercontent.com/chaintope/esplora-tapyrus/v0.5.8/LICENSE"},
+  {"name":"Google Sans","version":"Google Fonts","ecosystem":"font","license":"OFL-1.1","url":"https://fonts.google.com/specimen/Google+Sans","licenseUrl":"https://raw.githubusercontent.com/google/fonts/main/ofl/googlesans/OFL.txt"},
+  {"name":"M PLUS Rounded 1c","version":"Google Fonts","ecosystem":"font","license":"OFL-1.1","url":"https://fonts.google.com/specimen/M+PLUS+Rounded+1c","licenseUrl":"https://raw.githubusercontent.com/google/fonts/main/ofl/roundedmplus1c/OFL.txt"},
+  {"name":"Zen Dots","version":"Google Fonts","ecosystem":"font","license":"OFL-1.1","url":"https://fonts.google.com/specimen/Zen+Dots","licenseUrl":"https://raw.githubusercontent.com/google/fonts/main/ofl/zendots/OFL.txt"}
+]

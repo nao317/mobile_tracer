@@ -83,6 +83,7 @@ export function RecordScreen({
           <Alert>{c("workspace.record.correctionReasonPrefix")}{version.change_reason}</Alert>
         )}
       </Panel>
+      {!snapshot.workflow && <Panel title="写真・顧客承認・チェーン登録"><a className={uiStyles["ui-link-button"]} href={`/transactions/${version.id}/photos`}>取引の確認画面を開く</a></Panel>}
       {snapshot.workflow && <Panel title={c("workspace.record.photosSubmission")}>
         <div className={uiStyles["ui-actions"]}>
           <Link

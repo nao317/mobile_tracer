@@ -68,6 +68,8 @@ async function read<T>(
 }
 async function businessAuth(request: Request) {
   const auth = await requireSession(request);
+  if (auth.session.user.account_type === "general")
+    throw redirect("/casework", { headers: auth.headers });
   if (!auth.session.selected_staff_id)
     throw redirect("/account", { headers: auth.headers });
   return auth;

@@ -1,6 +1,14 @@
 # フロントエンド向け業務API
 
-車両・案件・記録・下書きの取得と保存に使うAPIの仕様です。写真のアップロード、記録の提出・訂正、確認・署名・共有、チェーンへの登録・照合は今回の対象に含みません。
+車両・案件・記録・下書きの取得と保存に使うAPIの仕様です。写真の保存、記録の提示・訂正、顧客承認、限定共有、チェーン登録・照合は[取引ワークフローAPI](transactions.md)を参照してください。
+
+案件の開始承認、作業提案・進捗報告、顧客からのインシデント・依頼は[案件フローAPI](casework.md)を参照してください。新規案件は顧客の開始承認まで `awaiting_customer` です。
+
+## ホームの取引履歴
+
+`GET /api/me/history?page=1&page_size=20` はログイン中の利用者の取引・承認・申請を、対象ごとにまとめて返します。会社の選択は不要です。閲覧ページの記録やブラウザーの保存データは使いません。
+
+本人の操作と本人の申請に対する審査結果が対象です。記録作成と画像保存は記録版単位、案件の条件提示・回答・作業操作は案件単位、申請と審査は申請単位で集約します。複数の対象は最終操作日時の降順に並べます。`data` と `pagination` を返し、各行には `target_type`、`target_id`、最終操作の `action`・`decision`・`at`、操作件数の `count`、本人の申請かを示す `own_application` が含まれます。監査ログの自由記述や他の利用者の氏名は返しません。
 
 ## 接続先と認証
 
@@ -88,7 +96,7 @@ FirebaseセッションCookieの検証後も、セッション・ユーザー・
 | 記録 | `record_kind`：完全一致 | `created_at` |
 | 記録版 | `status`：`draft` または `submitted` | `created_at`、`version_no` |
 
-案件の `case_type` は `rental`・`dealer`・`repair`、`status` は `in_progress`・`completed`・`cancelled` です。複数の条件はANDで組み合わせます。フィルターを指定しても権限の範囲は広がりません。
+案件の `case_type` は `rental`・`dealer`・`repair`、`status` は `awaiting_customer`・`in_progress`・`completed`・`cancelled` です。複数の条件はANDで組み合わせます。フィルターを指定しても権限の範囲は広がりません。
 
 ```json
 {
@@ -164,9 +172,9 @@ POSTには `store_id`・`vehicle_id`・`case_type`・`configuration_version_id` 
 }
 ```
 
-店舗・車両・担当者・構成版は同じ顧客に属するものを指定します。構成版は対象業態のモジュールを持つ反映済み版に限ります。担当者を指定する場合は、有効な担当者で、その店舗を担当できる役割が必要です。開始時の `stage` は構成版の最初の段階、`status` は `in_progress` になります。
+店舗・車両・担当者・構成版は同じ顧客に属するものを指定します。構成版は対象業態のモジュールを持つ反映済み版に限ります。担当者を指定する場合は、有効な担当者で、その店舗を担当できる役割が必要です。開始時の `stage` は構成版の最初の段階、`status` は `awaiting_customer` になります。顧客への開始条件提示と本人の承認を経て `in_progress` へ移ります。
 
-PATCHでは `assignee_id` と `stage` を指定できます。担当者は `null` で解除できます。`stage` はnull不可・100文字以内で、構成版の `transitions` で現在の段階から許可された移行先、または現在と同じ値を指定します。承認を伴う業務フローは後続APIで実装し、この設定には承認なしで移行できる段階だけを定義します。
+PATCHでは `assignee_id` と `stage` を指定できます。担当者は `null` で解除できます。`stage` はnull不可・100文字以内で、構成版の `transitions` で現在の段階から許可された移行先、または現在と同じ値を指定します。承認が必要な案件の段階変更は、案件フローAPIで顧客承認済みの作業に着手する際に行います。PATCHで承認を迂回する変更は拒否します。
 
 ```json
 {"assignee_id": null, "stage": "inspection"}

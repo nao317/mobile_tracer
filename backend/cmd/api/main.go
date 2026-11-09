@@ -17,7 +17,7 @@ import (
 	"github.com/nao317/mobile_tracer/backend/internal/config"
 	"github.com/nao317/mobile_tracer/backend/internal/database"
 	"github.com/nao317/mobile_tracer/backend/internal/server"
-	"github.com/nao317/mobile_tracer/backend/internal/tapyrus"
+	"github.com/nao317/mobile_tracer/backend/internal/tapyrusapi"
 )
 
 func main() {
@@ -49,9 +49,16 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 	if err != nil {
 		return err
 	}
-	tapyrusCfg, err := config.LoadTapyrus()
+	timestampCfg, err := config.LoadTapyrusAPI()
 	if err != nil {
 		return err
+	}
+	var timestampClient *tapyrusapi.Client
+	if timestampCfg.URL != "" {
+		timestampClient, err = tapyrusapi.New(timestampCfg)
+		if err != nil {
+			return err
+		}
 	}
 	dbCfg, err := config.LoadDatabase()
 	if err != nil {
@@ -64,15 +71,11 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 	defer func() {
 		runErr = errors.Join(runErr, db.Close())
 	}()
-	var readiness func(context.Context) error
-	if tapyrusCfg.RPCURL != "" {
-		client := tapyrus.New(tapyrusCfg)
-		readiness = func(ctx context.Context) error {
-			_, err := client.Check(ctx)
-			return err
-		}
+	checks := []func(context.Context) error{db.Ping}
+	if timestampClient != nil {
+		checks = append(checks, timestampClient.Check)
 	}
-	e := server.New(logger, db.Ping, readiness)
+	e := server.New(logger, checks...)
 	var provider authn.Provider
 	if identityCfg.Enabled {
 		provider, err = authn.Firebase(ctx, identityCfg)
@@ -87,6 +90,11 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 	identities := authn.New(db.GORM, identityCfg, provider, logger)
 	server.RegisterBusiness(e, business.New(db.GORM), apiAuth, identities)
 	identities.Register(e)
+	identities.RegisterWorkflow(e)
+	identities.RegisterCasework(e)
+	if timestampClient != nil {
+		identities.StartTimestampWorkflow(ctx, timestampClient, timestampCfg.URL)
+	}
 	server.ConfigureProxy(e, proxies)
 	srv := &http.Server{
 		Handler:           e,

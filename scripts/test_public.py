@@ -33,10 +33,20 @@ class PublicConfigTest(unittest.TestCase):
             for name in ("compose.yaml", "compose.firebase.yaml", "compose.public.yaml"):
                 command += ["-f", str(ROOT / name)]
             cls.config = json.loads(subprocess.check_output(command + ["config", "--format", "json"], env=env))
+            cls.local_chain_config = json.loads(subprocess.check_output(
+                command + ["--profile", "local-chain", "config", "--format", "json"], env=env))
 
     def test_real_compose_merge(self):
-        validate(self.config, check_files=False)
-        self.assertEqual(self.config["services"]["backend"]["environment"]["APP_ENV"], "production")
+        for profile, config in (("default", self.config), ("local-chain", self.local_chain_config)):
+            with self.subTest(profile=profile):
+                validate(config, check_files=False)
+                self.assertEqual(config["services"]["backend"]["environment"]["APP_ENV"], "production")
+
+    def test_local_chain_services_are_optional(self):
+        for service in ("tapyrus-init", "tapyrusd", "tapyrus-bootstrap", "esplora"):
+            with self.subTest(service=service):
+                self.assertNotIn(service, self.config["services"])
+                self.assertIn(service, self.local_chain_config["services"])
 
     def test_rejects_unsafe_configuration(self):
         for key, value in (("AUTH_PUBLIC_URL", "http://mbtracer.yellowtail.work"),
@@ -55,12 +65,13 @@ class PublicConfigTest(unittest.TestCase):
                     validate(config, check_files=False)
 
     def test_rejects_any_host_port(self):
-        for service in ("nginx", "frontend", "backend", "db", "tapyrusd", "esplora", "cloudflared"):
-            with self.subTest(service=service):
-                config = deepcopy(self.config)
-                config["services"][service]["ports"] = [{"target": 8080, "published": "8080"}]
-                with self.assertRaises(ValueError):
-                    validate(config, check_files=False)
+        for profile, resolved in (("default", self.config), ("local-chain", self.local_chain_config)):
+            for service in resolved["services"]:
+                with self.subTest(profile=profile, service=service):
+                    config = deepcopy(resolved)
+                    config["services"][service]["ports"] = [{"target": 8080, "published": "8080"}]
+                    with self.assertRaisesRegex(ValueError, f"Host ports must not be published: {service}"):
+                        validate(config, check_files=False)
 
     def test_rejects_tunnel_network_bypass(self):
         config = deepcopy(self.config)

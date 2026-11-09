@@ -213,7 +213,7 @@ test.describe("UI preview", () => {
     await expect(
       page.getByRole("navigation", { name: "メインナビゲーション" }),
     ).toBeVisible();
-    await expect(page.getByRole("main").getByRole("heading", { name: "操作履歴" })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: "取引・承認・申請の履歴" })).toBeVisible();
     const navigation = page.getByRole("navigation", { name: "メインナビゲーション" });
     await navigation.getByRole("button", { name: "案件", exact: true }).click();
     await expect(navigation.getByRole("link", { name: "案件", exact: true })).toBeVisible();
@@ -311,6 +311,8 @@ test("anonymous users cannot enter the live workspace", async ({ page }) => {
 test("live routes create and reopen a draft through the HTTP API with session and CSRF", async ({
   page,
   context,
+  browser,
+  baseURL,
 }) => {
   test.skip(
     !!process.env.PLAYWRIGHT_BASE_URL ||
@@ -320,6 +322,7 @@ test("live routes create and reopen a draft through the HTTP API with session an
   );
   await context.addCookies([
     { name: "ui_fixture_session", value: "1", domain: "127.0.0.1", path: "/" },
+    { name: "ui_fixture_casework", value: "business", domain: "127.0.0.1", path: "/" },
   ]);
   await page.goto("/app/vehicles/new");
   await page.getByLabel("車種名", { exact: true }).fill("HTTP接続テスト車両");
@@ -329,10 +332,21 @@ test("live routes create and reopen a draft through the HTTP API with session an
     page.getByRole("main").getByText("HTTP接続テスト車両", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "この車両で案件を作成" }).click();
-  await page.getByLabel("業態", { exact: true }).selectOption("rental");
-  await page.getByRole("button", { name: "案件を作成", exact: true }).click();
-  await expect(page).toHaveURL(/\/app\/cases\/[^/?]+$/);
-  await navigateInSidebar(page, new URL(page.url()).pathname + "/records");
+  await page.getByRole("link", { name: "顧客に開始条件を提示する" }).click();
+  await page.getByLabel("顧客の登録メールアドレス").fill("customer@casework.example");
+  await page.getByLabel("取引内容・車両状態・条件・金額").fill("HTTP接続テストの案件条件");
+  await page.getByLabel("案件開始の回答期限").fill("2030-11-09T18:00");
+  await page.getByRole("button",{name:"案件条件を固定して顧客へ提示する"}).click();
+  await expect(page).toHaveURL(/\/casework\/[^/?]+\/start$/);
+  const caseID=new URL(page.url()).pathname.split("/")[2];
+  const recipient=await browser.newContext();
+  await recipient.addCookies([{name:"ui_fixture_session",value:"1",url:baseURL!},{name:"ui_fixture_casework",value:"customer",url:baseURL!}]);
+  const client=await recipient.newPage();await client.goto(`/casework/${caseID}/start`);
+  await client.getByLabel("対象の内容と条件を確認しました").check();
+  await client.getByRole("button",{name:"案件開始への回答を保存する"}).click();
+  await expect(client.getByText("進行中",{exact:true})).toBeVisible();await recipient.close();
+  await page.goto(`/app/cases/${caseID}`);
+  await navigateInSidebar(page, `/app/cases/${caseID}/records`);
   await page.getByRole("main").getByRole("link", { name: "記録を追加", exact: true }).click();
   await page.getByLabel("走行距離（km）（提出時に必須）").fill("25000");
   await page.getByRole("button", { name: "下書きを保存", exact: true }).click();

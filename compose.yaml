@@ -36,6 +36,8 @@ services:
   backend:
     build:
       context: ./backend
+    # Match the owner of host-mounted 0600 credentials when configured locally.
+    user: "${BACKEND_UID:-65532}:${BACKEND_GID:-65532}"
     environment:
       APP_ENV: ${APP_ENV:-production}
       DEV_AUTH_TOKEN: ${DEV_AUTH_TOKEN:-}
@@ -62,15 +64,22 @@ services:
       DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-10}
       DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-2}
       DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-30m}
+      # Used only by the optional /app/tapyrus-check legacy verification CLI.
+      # The API server registers records through TAPYRUS_API_* below.
       TAPYRUS_RPC_URL: http://tapyrusd:12381
-      TAPYRUS_RPC_USER: ${TAPYRUS_RPC_USER:-mobiletracer}
-      TAPYRUS_RPC_PASSWORD: ${TAPYRUS_RPC_PASSWORD:?Run bash scripts/init.sh first}
       TAPYRUS_REST_URL: http://esplora:3000
+      TAPYRUS_RPC_USER: ${TAPYRUS_RPC_USER:-mobiletracer}
+      TAPYRUS_RPC_PASSWORD: ${TAPYRUS_RPC_PASSWORD:-}
       TAPYRUS_TIMEOUT: ${TAPYRUS_TIMEOUT:-5s}
+      TAPYRUS_API_URL: ${TAPYRUS_API_URL:-}
+      TAPYRUS_API_TOKEN_FILE: ${TAPYRUS_API_TOKEN_FILE:-}
+      TAPYRUS_API_CERT_FILE: ${TAPYRUS_API_CERT_FILE:-}
+      TAPYRUS_API_KEY_FILE: ${TAPYRUS_API_KEY_FILE:-}
+      TAPYRUS_API_CA_FILE: ${TAPYRUS_API_CA_FILE:-}
+      TAPYRUS_API_TIMEOUT: ${TAPYRUS_API_TIMEOUT:-10s}
+    volumes:
+      - ${TAPYRUS_API_SECRETS_DIR:-./secrets/tapyrus-api}:/run/tapyrus-api:ro
     depends_on:
-      esplora:
-        condition: service_healthy
-      # テーブル作成を終えてからAPIを起動する。
       db-migrate:
         condition: service_completed_successfully
     # Keep this longer than SHUTDOWN_TIMEOUT when changing the shutdown limit.
@@ -83,12 +92,13 @@ services:
       retries: 3
 
   tapyrus-init:
+    profiles: [local-chain]
     image: &core-image tapyrus/tapyrusd:v0.7.2@sha256:3ef027bb32855d771b632d65a004b5b6a55a06da1f37d39cad181c3329fb9d82
     entrypoint: ["sh", "/opt/tapyrus/init.sh"]
     environment: &core-environment
       TAPYRUS_NETWORK_ID: ${TAPYRUS_NETWORK_ID:-1905960821}
       TAPYRUS_RPC_USER: ${TAPYRUS_RPC_USER:-mobiletracer}
-      TAPYRUS_RPC_PASSWORD: ${TAPYRUS_RPC_PASSWORD:?Run bash scripts/init.sh first}
+      TAPYRUS_RPC_PASSWORD: ${TAPYRUS_RPC_PASSWORD:-}
       TAPYRUS_WALLET: ${TAPYRUS_WALLET:-mobile-tracer}
     volumes: &core-volumes
       - tapyrus-data:/var/lib/tapyrus
@@ -96,6 +106,7 @@ services:
       - ./docker/tapyrus:/opt/tapyrus:ro
 
   tapyrusd:
+    profiles: [local-chain]
     image: *core-image
     entrypoint: ["tapyrusd", "-datadir=/var/lib/tapyrus", "-conf=/var/lib/tapyrus/tapyrus.conf", "-printtoconsole"]
     environment: *core-environment
@@ -111,6 +122,7 @@ services:
       retries: 30
 
   tapyrus-bootstrap:
+    profiles: [local-chain]
     image: *core-image
     entrypoint: ["sh", "/opt/tapyrus/bootstrap.sh"]
     environment: *core-environment
@@ -120,6 +132,7 @@ services:
         condition: service_healthy
 
   esplora:
+    profiles: [local-chain]
     build:
       context: ./backend
       target: esplora
