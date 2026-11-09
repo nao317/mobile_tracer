@@ -125,6 +125,7 @@ type rig struct {
 	provider *fakeFirebase
 	cfg      config.Auth
 	logs     *safeLog
+	service  *authn.Service
 }
 type jar map[string]*http.Cookie
 
@@ -139,7 +140,9 @@ func newRig(t *testing.T) *rig {
 	service := authn.New(db, cfg, p, logger)
 	server.RegisterBusiness(e, business.New(db), config.BusinessAuth{Environment: "production"}, service)
 	service.Register(e)
-	return &rig{t, db, e, p, cfg, logs}
+	service.RegisterWorkflow(e)
+	service.RegisterCasework(e)
+	return &rig{t, db, e, p, cfg, logs, service}
 }
 func (h *rig) call(method, path, body string, cookies jar, modify func(*http.Request)) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, h.cfg.PublicURL+path, strings.NewReader(body))

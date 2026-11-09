@@ -36,6 +36,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       # lockfileどおりに依存を復元し、静的解析・単体テスト・ビルドを確認する。
       - run: npm ci
+      - run: python3 ../scripts/generate-licenses.py --check
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
@@ -240,7 +241,7 @@ jobs:
 
       # 起動完了を最大180秒待つ。サービスの準備状態はComposeのhealthcheckで定義する。
       - name: Build and start services
-        run: docker compose up --build --wait --wait-timeout 180
+        run: docker compose --profile local-chain up --build --wait --wait-timeout 180
 
       - name: Check application connections
         run: python3 scripts/smoke.py

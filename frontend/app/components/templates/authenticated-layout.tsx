@@ -5,11 +5,15 @@ import { DisplayControls, useTranslation } from "../ui/display-settings";
 import type { SessionView } from "../../lib/auth.server";
 import styles from "./authenticated-layout.module.css";
 import { clearNativeValidation, localizeNativeValidation } from "../atoms/native-validation";
-import { activityKey, recordActivity } from "./activity-history";
 
 export type NavigationGroup = { id: string; label: string; items: { id: string; label: string; to: string }[] };
-export function AuthenticatedLayout({ children, groups, session, title }: { children: ReactNode; groups: NavigationGroup[]; session?: SessionView | null; title?: string }) {
+export function AuthenticatedLayout({ children, groups: suppliedGroups, session, title }: { children: ReactNode; groups: NavigationGroup[]; session?: SessionView | null; title?: string }) {
   const t = useTranslation();
+  const licenseGroup = suppliedGroups.find(group => group.id === "licenses") ??
+    { id: "licenses", label: t("navigation.licenses"), items: [{ id: "licenses", label: t("navigation.licenses"), to: "/licenses" }] };
+  const groups = suppliedGroups.filter(group => group.id !== "licenses");
+  const settingsIndex = groups.findIndex(group => group.id === "settings");
+  groups.splice(settingsIndex < 0 ? groups.length : settingsIndex + 1, 0, licenseGroup);
   const location = useLocation();
   const pending = useNavigation().state !== "idle";
   const [expanded, setExpanded] = useState(true);
@@ -47,11 +51,6 @@ export function AuthenticatedLayout({ children, groups, session, title }: { chil
     if (title) document.title = `${title} | Mobile Tracer`;
   }, [title]);
   useEffect(() => {
-    if (title && !["/app", "/app/", "/preview", "/preview/"].includes(location.pathname)) {
-      recordActivity(activityKey(session?.user.email, location.pathname.startsWith("/preview")), location.pathname + location.search, title);
-    }
-  }, [location.pathname, location.search, title, session?.user.email]);
-  useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
     const resize = () => { if (media.matches) dialog.current?.close(); };
     media.addEventListener("change", resize);
@@ -60,12 +59,18 @@ export function AuthenticatedLayout({ children, groups, session, title }: { chil
   function navigation(prefix: string) {
     return <nav aria-label={t("navigation.main")} className={styles.navigation}>
       {groups.map(group => <div key={group.id} className={styles.group}>
+        {group.items.length === 1 ? (
+          <Link className={`${styles.link} ${styles.groupLink}`} to={group.items[0].to} aria-current={isCurrent(group.items[0].to) ? "page" : undefined}>
+            {group.items[0].label}
+          </Link>
+        ) : <>
         <button type="button" className={styles.groupButton} aria-expanded={selectedGroup === group.id} aria-controls={`${prefix}-${group.id}`} onClick={() => setOpenGroup({ active, id: selectedGroup === group.id ? "" : group.id })}>
           {group.label}<ChevronDown size={16} aria-hidden="true" />
         </button>
         <div className={styles.links} id={`${prefix}-${group.id}`} hidden={selectedGroup !== group.id}>
           {group.items.map(item => <Link className={styles.link} key={item.id} to={item.to} aria-current={isCurrent(item.to) ? "page" : undefined}>{item.label}</Link>)}
         </div>
+        </>}
       </div>)}
     </nav>;
   }

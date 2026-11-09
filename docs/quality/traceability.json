@@ -1,9 +1,9 @@
 {
   "schema_version": "MOBILTRACER_REQUIREMENTS_TRACE_V1",
   "source": "docs/design.md",
-  "source_sha256": "f182b0ea20da58e7c48c9486760b327fb13efadf51764019ff2cbea67961bd30",
+  "source_sha256": "64365acc9ac38e8eb0537e4f02d41ecebc0f15c1629f3867951970aa89ac95b1",
   "document_id": "MT-REQ",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "status": "draft",
   "quality_phase": "Validate",
   "counts": {

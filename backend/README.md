@@ -1,6 +1,6 @@
 # バックエンドAPI
 
-Go・Echoで動くAPIです。`GET /api/health` はAPI単体の稼働を確認し、HTTP 200と `{"status":"ok"}` を返します。`GET /api/ready` はPostgreSQLへの接続と、Tapyrus Core・Esploraの接続・索引の準備状態を確認します。ComposeではNginx経由でアクセスします。
+Go・Echoで動くAPIです。`GET /api/health` はAPI単体の稼働を確認し、HTTP 200と `{"status":"ok"}` を返します。`GET /api/ready` はPostgreSQLと、設定済みの場合はChaintopeのTapyrus APIへの接続を確認します。ComposeではNginx経由でアクセスします。
 
 車両・案件・記録・下書きの基本操作APIも実装しています。エンドポイント、検索クエリ、JSON形式、権限、エラー、開発用データと操作例は[フロントエンド向けAPI仕様](../docs/api.md)を参照してください。Firebase Authenticationのメール・パスワードとGoogleログインに対応しており、設定・担当者への紐付け・Firebaseの設定と確認手順は[認証の手順](../docs/auth.md)に記載しています。
 
@@ -104,14 +104,13 @@ APIは起動時に環境変数を読み取ります。必須項目が空の場�
 | `DB_MAX_OPEN_CONNS` | `10` | APIプロセスごとの最大接続数。1以上の整数。 |
 | `DB_MAX_IDLE_CONNS` | `2` | 待機接続数の上限。0以上かつ最大接続数以下の整数。 |
 | `DB_CONN_MAX_LIFETIME` | `30m` | 接続を再利用する期間の上限。正の時間を指定します。 |
-| `TAPYRUS_RPC_URL` | 未設定 | CoreのRPC接続先。Composeでは `http://tapyrusd:12381`。 |
-| `TAPYRUS_REST_URL` | 未設定 | EsploraのREST接続先。Composeでは `http://esplora:3000`。 |
-| `TAPYRUS_RPC_USER` / `TAPYRUS_RPC_PASSWORD` | 未設定 | CoreのRPC認証情報。両URLを指定する場合に必要。 |
-| `TAPYRUS_TIMEOUT` | `5s` | 接続確認全体の上限時間。正の時間を指定。 |
+| `TAPYRUS_API_URL` | 未設定 | Tapyrus APIのHTTPSオリジン。未設定なら外部登録を保留。 |
+| `TAPYRUS_API_TOKEN_FILE` | 未設定 | アクセストークンファイル。 |
+| `TAPYRUS_API_CERT_FILE` / `TAPYRUS_API_KEY_FILE` | 未設定 | PEM形式のクライアント証明書・秘密鍵。 |
+| `TAPYRUS_API_CA_FILE` | 未設定 | 任意の追加CA。 |
+| `TAPYRUS_API_TIMEOUT` | `10s` | APIの通信上限。 |
 
-Tapyrusの両接続先を省略しても、DBの設定と接続は必要です。この場合は `/api/health` が200、`/api/ready` が503を返します。Tapyrusも利用する場合は両URLと認証情報を揃えてください。
-
-準備状態はDB、Tapyrusの順に確認するため、全体の待機時間は最大で `DB_TIMEOUT + TAPYRUS_TIMEOUT` です。ComposeのAPIヘルスチェックは10秒で打ち切ります。確認時間を増やす場合は、この値も余裕を持って調整してください。
+接続設定・案件開始承認・双方のイベント処理・登録結果不明時の復旧は[案件フローAPI](../docs/casework.md)を参照してください。API未設定でも業務データと承認を保存し、登録待ちを保持します。DBが正常なら準備状態は200です。API設定済みの場合はDBとAPIの両方を確認します。
 
 NginxはHost・`X-Real-IP`・`X-Forwarded-For`・`X-Forwarded-Proto`を設定します。Goは `TRUSTED_PROXY_CIDRS` に含まれる接続元の `X-Real-IP` と通信方式を採用します。空の場合は接続自体のIPと通信方式を使います。Nginxの応答待機時間は15秒です。APIの接続確認時間を増やす場合は、こちらも調整してください。
 

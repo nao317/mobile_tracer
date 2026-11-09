@@ -77,7 +77,7 @@ test("display preferences work on workspace screens", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
-test("signed-in users without a company can open the dashboard", async ({
+test("signed-in general users see transaction history on home", async ({
   page,
   context,
   baseURL,
@@ -94,14 +94,9 @@ test("signed-in users without a company can open the dashboard", async ({
   ]);
   await page.goto("/");
   await expect(page).toHaveURL(/\/app$/);
-  await expect(
-    page.getByText(
-      "業務データを表示するには、アカウント画面で所属を選択してください。",
-    ),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "アカウント・所属を確認" }),
-  ).toHaveAttribute("href", "/account");
+  await expect(page.getByRole("heading",{name:"取引・承認・申請の履歴",exact:true})).toBeVisible();
+  await expect(page.getByRole("main")).toContainText("承認");
+  await expect(page.getByRole("main")).not.toContainText("閲覧したページ");
 });
 
 test("an unknown URL displays the 404 page", async ({ page }) => {

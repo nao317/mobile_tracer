@@ -1,3 +1,5 @@
+import { createCaseworkFixture } from "./casework-api.mjs";
+import { transactionFixture } from "./transaction-api.mjs";
 import { createServer } from "node:http";
 import { createPreviewData } from "../../app/features/workspace/preview-data.ts";
 import { createManagementFixture } from "./management-api.mjs";
@@ -17,6 +19,7 @@ const session = {
   system_admin: false,
   csrf_token: "fixture-csrf",
 };
+const casework = createCaseworkFixture(snapshot,session);
 const config = {
   enabled: true,
   apiKey: "e2e-public-key",
@@ -39,6 +42,7 @@ const server = createServer(async (request, response) => {
     management.resetGeneral();
     return send({ status: "ok" });
   }
+  if(request.method==="POST"&&url.pathname==="/__fixture/reset-casework"){casework.reset();return send({status:"ok"});}
   if (request.method === "GET" && request.url === "/api/auth/config") {
     response.end(JSON.stringify({ data: config }));
   } else if (request.method === "GET" && request.url === "/health") {
@@ -47,9 +51,13 @@ const server = createServer(async (request, response) => {
     const role = (request.headers.cookie ?? "").match(
       /ui_fixture_role=(admin|general)/,
     )?.[1];
+    const caseRole=(request.headers.cookie??"").match(/ui_fixture_casework=(business|customer)/)?.[1];
+    if (url.pathname === "/api/me/history") return send({data:[{target_type:"record_version",target_id:snapshot.versions[0].id,action:"transaction.respond",decision:"approved",at:"2026-11-09T10:00:00Z",count:3,own_application:true}],pagination:{page:1,page_size:20,total:1}});
     if (url.pathname === "/api/auth/me")
-      return send({ data: role ? management.session(role) : session });
+      return send({ data: caseRole?casework.session(caseRole):role ? management.session(role) : session });
+    if(await casework.handle(request,url,send,caseRole??(role?"customer":"business")))return;
     if (role && (await management.handle(request, url, send, role))) return;
+    if (transactionFixture(request,url,send,snapshot,session)) return;
     if (url.pathname === "/api/context")
       return send({ data: snapshot.context });
     let collection, item;

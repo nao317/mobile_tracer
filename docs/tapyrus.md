@@ -1,5 +1,8 @@
 # Tapyrusのローカル開発環境
 
+この文書は任意の `local-chain` プロファイルによるCore・Esploraの検証手順です。アプリの登録先はChaintopeのTapyrus APIへ変更しています。[案件フロー・API接続手順](casework.md)を参照してください。ローカルチェーンを起動する場合は以下のComposeコマンドに `--profile local-chain` を付けます。
+
+
 Go APIからTapyrus CoreのRPCとEsploraのREST APIに接続するための環境です。Docker Engine、Docker Compose v2、Bash、Python 3を使用します。Goをホストにインストールする必要はありません。
 
 最初に「初期化と起動」を実行してください。「接続確認とテスト」以降は、検証や再起動が必要なときに参照できます。

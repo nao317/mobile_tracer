@@ -16,11 +16,14 @@ import (
 )
 
 type Service struct {
-	db       *gorm.DB
-	cfg      config.Auth
-	provider Provider
-	business *business.Service
-	logger   *slog.Logger
+	timestampAPI   TimestampAPI
+	timestampScope string
+	workflowChain  WorkflowChain
+	db             *gorm.DB
+	cfg            config.Auth
+	provider       Provider
+	business       *business.Service
+	logger         *slog.Logger
 }
 type User struct {
 	ID            string `json:"id"`

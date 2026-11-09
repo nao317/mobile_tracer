@@ -2,7 +2,7 @@
 
 ## システムを起動する
 
-このラップトップのDocker Desktopを起動し、WSL2のターミナルからリポジトリルートで実行します。Nginx、React RouterのSSRサーバー、Go API、PostgreSQL、Tapyrus Core・EsploraをDockerで動かします。
+このラップトップのDocker Desktopを起動し、WSL2のターミナルからリポジトリルートで実行します。Nginx、React RouterのSSRサーバー、Go API、PostgreSQLをDockerで動かし、ブロックチェーン登録にはChaintopeのTapyrus APIを使います。
 
 | 用途 | アクセス先 | 環境変数ファイル | 認証 |
 | --- | --- | --- | --- |
@@ -115,6 +115,14 @@ Goを使ったローカル起動、環境変数、テストの実行方法は[�
 
 Tapyrusの初期化、接続確認、検証用送金、停止・データ削除の方法は[Tapyrusのローカル開発環境](docs/tapyrus.md)に記載しています。外部テストネットに接続せず、単一ノードの開発モードで検証します。
 
+## 案件の開始承認とTapyrus API
+
+案件開始、業者からの作業提案・進捗報告、顧客からの報告・依頼は[案件フロー・接続手順](docs/casework.md)を参照してください。画面は `/casework` です。顧客が開始条件を承認するまで案件は進行できません。
+
+Tapyrus APIはクライアント証明書・秘密鍵・アクセストークンを使って接続します。設定例は `.env.example` と `.env.public.example` にあります。認証情報未設定時は業務データと承認を保存して登録を保留し、画面に未設定を表示します。実サービスへの接続確認は認証情報の準備後に行います。
+
+Core・Esploraは `local-chain` プロファイルに分けています。アプリの通常起動には不要です。既存のローカルチェーン検証では `docker compose --profile local-chain ...` を使います。
+
 ## 要件定義書とPDF
 
 要件の原本は[docs/design.md](docs/design.md)、最新版PDFは[docs/design.pdf](docs/design.pdf)です。編集・環境準備・改訂版保存・共有ドライブへの手動アップロードの手順は[docs/README.md](docs/README.md)を参照してください。
@@ -148,17 +156,17 @@ flowchart TB
         api1["Go API<br/>Echo・GORM・goroutine"]
         api2["Go API 2台目<br/>必要に応じて追加"]
         db[("PostgreSQL")]
-        tapyrus["Tapyrus API"]
 
         nginx -->|画面| frontend
         nginx -->|/api| api1
         nginx -.->|/apiの負荷分散| api2
         frontend -->|サーバー側からのAPI呼び出し| api1
         api1 -->|業務データ・処理状況| db
-        api1 -->|Tapyrus連携| tapyrus
         api2 -.-> db
-        api2 -.-> tapyrus
     end
+    tapyrus["Chaintope Tapyrus API（外部）"]
+    api1 -->|mTLS・Timestamp V2| tapyrus
+    api2 -.-> tapyrus
     browser -->|HTTPリクエスト| nginx
 ```
 

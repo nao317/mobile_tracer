@@ -82,9 +82,17 @@ func (c *Client) rpc(ctx context.Context, method string, params []any, result an
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(c.cfg.RPCUser, c.cfg.RPCPassword)
-	data, err := c.do(req, "Tapyrus RPC")
+	httpResponse, err := c.http.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("Tapyrus RPC %s request failed: %w", method, err)
+	}
+	defer httpResponse.Body.Close()
+	if httpResponse.StatusCode != 200 && httpResponse.StatusCode != 500 {
+		return fmt.Errorf("Tapyrus RPC %s returned HTTP %d", method, httpResponse.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(httpResponse.Body, (1<<20)+1))
+	if err != nil || len(data) > 1<<20 {
+		return fmt.Errorf("Tapyrus RPC %s invalid response", method)
 	}
 	var response struct {
 		Result json.RawMessage `json:"result"`

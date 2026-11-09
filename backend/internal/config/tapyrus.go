@@ -9,6 +9,7 @@ import (
 )
 
 type Tapyrus struct {
+	Wallet      string
 	RPCURL      string
 	RPCUser     string
 	RPCPassword string
@@ -19,11 +20,15 @@ type Tapyrus struct {
 // LoadTapyrus allows the API to run alone when neither endpoint is configured.
 func LoadTapyrus() (Tapyrus, error) {
 	cfg := Tapyrus{
+		Wallet:      os.Getenv("TAPYRUS_WALLET"),
 		RPCURL:      os.Getenv("TAPYRUS_RPC_URL"),
 		RPCUser:     os.Getenv("TAPYRUS_RPC_USER"),
 		RPCPassword: os.Getenv("TAPYRUS_RPC_PASSWORD"),
 		RESTURL:     strings.TrimRight(os.Getenv("TAPYRUS_REST_URL"), "/"),
 		Timeout:     5 * time.Second,
+	}
+	if cfg.Wallet == "" {
+		cfg.Wallet = "mobile-tracer"
 	}
 	if value := os.Getenv("TAPYRUS_TIMEOUT"); value != "" {
 		timeout, err := time.ParseDuration(value)

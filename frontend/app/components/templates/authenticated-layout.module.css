@@ -11,6 +11,7 @@
 .groupButton { width: 100%; border: 0; background: transparent; display: flex; align-items: center; justify-content: space-between; padding: .5rem .75rem; font-weight: 600; cursor: pointer; text-align: start; }
 .links { display: grid; gap: .15rem; padding-left: .5rem; }
 .link { display: flex; align-items: center; padding: .5rem .75rem; text-decoration: none; }
+.groupLink { font-weight: 600; }
 .link:hover,.groupButton:hover,.iconButton:hover,.logout:hover { background: var(--ui-accent-soft); }
 .link[aria-current=page] { background: var(--ui-accent-soft); color: var(--ui-link, var(--ui-accent)); font-weight: 700; }
 .groupButton svg { transform: rotate(-90deg); transition: transform 180ms ease; }

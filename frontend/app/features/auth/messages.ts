@@ -18,6 +18,7 @@ export const copy = {
     back: "ログインに戻る",
     resetTitle: "パスワードの再設定",
     home: "ホームへ",
+    licenses: "OSS・ライブラリのライセンス",
     unavailable:
       "ログインの準備ができていません。管理者にお問い合わせください。",
     verification:
@@ -49,6 +50,7 @@ export const copy = {
     back: "Back to sign in",
     resetTitle: "Reset your password",
     home: "Back to home",
+    licenses: "Open-source licenses",
     unavailable:
       "Sign-in is not available yet. Please contact your administrator.",
     verification:
