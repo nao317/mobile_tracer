@@ -15,5 +15,5 @@
 <text x="350" y="329" class="label" text-anchor="start" style="fill:#99621b">対応中</text>
 <rect x="20" y="370" width="960" height="76" rx="10" fill="#fff4df"/>
 <text x="65" y="419" class="label" text-anchor="start">検証</text>
-<text x="350" y="419" class="label" text-anchor="start" style="fill:#99621b">基準登録待ち</text>
+<text x="350" y="419" class="label" text-anchor="start" style="fill:#99621b">未登録・顧客承認待ち</text>
 </svg>
