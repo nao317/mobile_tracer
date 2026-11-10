@@ -30,6 +30,7 @@ services:
     mem_limit: "${LOAD_API_MEMORY_MIB}m"
     environment:
       APP_ENV: development
+      LOAD_DB_POOL_METRICS: "1"
       AUTH_PUBLIC_URL: http://localhost:${LOAD_HTTP_PORT}
       FIREBASE_PROJECT_ID: demo-mobile-tracer-load
       FIREBASE_API_KEY: demo-api-key
@@ -165,7 +166,7 @@ services:
       TEST_DATABASE: "1"
       FIREBASE_AUTH_EMULATOR_HOST: firebase-auth:9099
       FIREBASE_TEST_PROJECT_ID: demo-mobile-tracer-load
-    entrypoint: ["go", "test", "-count=1", "./internal/authn", "./internal/business", "./internal/tapyrusapi", "./internal/config"]
+    entrypoint: ["go", "test", "-count=1", "./cmd/api", "./internal/authn", "./internal/business", "./internal/tapyrusapi", "./internal/config"]
 
   db-test:
     image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b

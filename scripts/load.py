@@ -266,13 +266,19 @@ def snapshot(*, cpu_detail=False):
             if sample.returncode == 0:
                 cpu[ident] = {key: int(value) for key, value in (line.split() for line in sample.stdout.splitlines())}
     host = {}
+    pools = {}
+    for ident in compose("ps", "-q", "backend", capture=True).stdout.split():
+        sample = run(DOCKER + ["exec", ident, "wget", "-T", "2", "-qO-", "http://127.0.0.1:9469/db-pool"],
+                     capture=True, check=False, quiet=True)
+        if sample.returncode == 0:
+            pools[ident] = json.loads(sample.stdout)
     for file in ("stat", "meminfo", "diskstats"):
         path = Path("/proc") / file
         if path.is_file():
             lines = path.read_text().splitlines()
             host[file] = lines[:1] if file == "stat" else lines
     return {"db": db, "docker": [json.loads(line) for line in stats.stdout.splitlines()],
-            "limits": limits, "cpu_stat_by_id": cpu, "host": host}
+            "limits": limits, "cpu_stat_by_id": cpu, "db_pools_by_id": pools, "host": host}
 
 
 def trial(cfg, args, *, warmup=False):

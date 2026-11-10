@@ -205,10 +205,10 @@ BEGIN
       submit_idempotency_key=pg_temp.fixture_id(v.id,'submit'),submitted_by=v.created_by,submitted_at=v.created_at+interval '1 minute'
    FROM fixture_cases c JOIN app.vehicles vehicle ON vehicle.id=c.vehicle
    WHERE v.case_id=c.id AND v.version_no=version AND EXISTS(SELECT FROM app.workflow_presentations p WHERE p.version_id=v.id);
-   INSERT INTO app.workflow_requests(id,version_id,user_id,qualification,kind,statement,deadline)
+   INSERT INTO app.workflow_requests(id,version_id,user_id,qualification,kind,statement,deadline,created_at)
    SELECT pg_temp.fixture_id(v.id,'confirmation'),v.id,c.customer,
      CASE c.kind WHEN 'rental' THEN 'renter' WHEN 'dealer' THEN 'purchaser' ELSE 'repair_requester' END,
-     'state_agreement','Synthetic record review',v.created_at+interval '1 day'
+     'state_agreement','Synthetic record review',v.created_at+interval '1 day',v.created_at
    FROM app.workflow_presentations p JOIN app.record_versions v ON v.id=p.version_id
    JOIN fixture_cases c ON c.id=v.case_id WHERE v.version_no=version;
  END LOOP;
@@ -221,7 +221,7 @@ INSERT INTO app.workflow_responses(request_id,actor_id,decision,created_at)
  JOIN app.record_versions v ON v.id=q.version_id WHERE v.version_no=1;
 WITH manifests AS (
  SELECT p.version_id,pg_temp.bytes(jsonb_build_object('schema','mobile-tracer/anchor/v1',
-  'content_hash',p.content_hash,'approvals',jsonb_build_array(to_jsonb(q)||jsonb_build_object(
+  'content_hash',p.content_hash,'approvals',jsonb_build_array((to_jsonb(q)-'created_at')||jsonb_build_object(
     'deadline',pg_temp.iso(q.deadline),'decision',r.decision,'responded_at',pg_temp.iso(r.created_at))))) AS raw
  FROM app.workflow_presentations p JOIN app.workflow_requests q ON q.version_id=p.version_id
  JOIN app.workflow_responses r ON r.request_id=q.id

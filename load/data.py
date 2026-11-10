@@ -248,7 +248,9 @@ def write_json(path, data):
 
 
 def seed(cfg, fixture):
-    digest = sha(stable(cfg).encode())
+    seed_sql = Path("/work/seed.sql").read_text()
+    sql_digest = sha(seed_sql.encode())
+    digest = sha(stable({"config": cfg, "sql_sha256": sql_digest}).encode())
     table = query("SELECT to_regclass('load_fixture.dataset')")
     previous = query("SELECT digest FROM load_fixture.dataset") if table else ""
     if previous and previous != digest:
@@ -273,10 +275,10 @@ def seed(cfg, fixture):
             # PostgreSQL COPY text format escapes backslashes.
             file.write_text(stable(payload).replace("\\", "\\\\") + "\n")
             sql = Path(directory) / "seed.sql"
-            sql.write_text(Path("/work/seed.sql").read_text().replace("@FIXTURE_FILE@", str(file)))
+            sql.write_text(seed_sql.replace("@FIXTURE_FILE@", str(file)))
             query(None, script=sql)
     usable = [case for case in fixture["cases"] if case["state"] != "reserved"]
-    dataset = {"id": cfg["dataset"], "seed": cfg["seed"], "digest": digest, "cases": cfg["cases"],
+    dataset = {"id": cfg["dataset"], "seed": cfg["seed"], "digest": digest, "sql_sha256": sql_digest, "cases": cfg["cases"],
                "customers": cfg["customers"], "hot_percent": cfg["hot_percent"], "estimate": estimate(cfg, fixture)}
     write_json(STATE / "dataset.json", dataset)
     write_json(STATE / "fixture-targets.json", {"read": usable, "write": fixture["cases"][:cfg["reserved"]],
@@ -349,7 +351,7 @@ def stats():
       'media',(SELECT json_build_object('count',count(*),'bytes',coalesce(sum(octet_length(bytes)),0)) FROM app.workflow_media),
       'queue',(SELECT coalesce(json_object_agg(status,n),'{}'::json) FROM
         (SELECT status,count(*) n FROM integrity.api_registrations GROUP BY status) s),
-      'oldest_queue_seconds',(SELECT extract(epoch FROM now()-min(updated_at)) FROM integrity.api_registrations WHERE status='queued'),
+      'oldest_queue_seconds',(SELECT extract(epoch FROM now()-min(created_at)) FROM integrity.api_registrations WHERE status='queued'),
       'confirmed_total',(SELECT count(*) FROM integrity.api_registrations WHERE status='confirmed'));
     """
     result = json.loads(query(sql))
