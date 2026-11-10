@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 const labels = {
-  ja: { navigation: "メインナビゲーション", open: "メニューを開く", close: "メニューを閉じる", vehicles: "車両", cases: "案件" },
-  en: { navigation: "Main navigation", open: "Open menu", close: "Close menu", vehicles: "Vehicles", cases: "Cases" },
+  ja: { navigation: "メインナビゲーション", open: "メニューを開く", close: "メニューを閉じる", vehicles: "車両", transactions: "取引・記録", cases: "案件" },
+  en: { navigation: "Main navigation", open: "Open menu", close: "Close menu", vehicles: "Vehicles", transactions: "Transactions and records", cases: "Cases" },
 };
 
 test.describe("shared navigation shell", () => {
@@ -40,7 +40,7 @@ test.describe("shared navigation shell", () => {
       await expect(open).toBeFocused();
       await open.click();
       const navigation = drawer.getByRole("navigation", { name: text.navigation });
-      await navigation.getByRole("button", { name: text.vehicles, exact: true }).click();
+      await navigation.getByRole("button", { name: text.transactions, exact: true }).click();
       await navigation.getByRole("link", { name: text.vehicles, exact: true }).click();
       await expect(page).toHaveURL(/\/preview\/vehicles$/);
       await expect(drawer).not.toBeVisible();
