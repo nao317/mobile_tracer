@@ -180,7 +180,8 @@ function key() {
 const deadline = () => new Date(Date.now() + 3600000).toISOString();
 
 function read(sessions, i) {
-  const row = Math.random() * 100 < targets.hot_percent ? readSlots[0] : readSlots[i % readSlots.length];
+  const isHot = (i * 37 + 17) % 100 < targets.hot_percent;
+  const row = isHot ? readSlots[0] : readSlots[i % readSlots.length];
   const customer = sessions[row.customer_email];
   const business = sessions[i % 2 ? row.staff_email : row.manager_email];
   get(customer, 'case_list', '/api/casework', Array.isArray);
