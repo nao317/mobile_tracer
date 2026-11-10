@@ -1,0 +1,36 @@
+{
+  "dataset": "probe",
+  "seed": 76,
+  "reference_time": "2026-01-01T00:00:00Z",
+  "stores_per_company": 2,
+  "admins_per_company": 1,
+  "managers_per_store": 1,
+  "staff_per_store": 1,
+  "events_per_case": 0,
+  "records_per_case": 1,
+  "versions_per_record": 1,
+  "business_percent": {
+    "rental": 100,
+    "dealer": 0,
+    "repair": 0
+  },
+  "start_percent": {
+    "approved": 0,
+    "pending": 100,
+    "rejected": 0,
+    "held": 0,
+    "expired": 0,
+    "corrected": 0
+  },
+  "customer_event_percent": 35,
+  "photo_percent": 0,
+  "photos_per_version": 2,
+  "photo_format": "jpeg",
+  "photo_bytes": 16384,
+  "hot_percent": 0,
+  "companies": 3,
+  "customers": 6,
+  "vehicles": 6,
+  "cases": 12,
+  "reserved": 3
+}

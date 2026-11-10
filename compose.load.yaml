@@ -1,0 +1,185 @@
+name: mobile-tracer-load
+services:
+  nginx:
+    image: nginx:1.30.6-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
+    networks: [edge, default]
+    ports:
+      - "127.0.0.1:${LOAD_HTTP_PORT}:8080"
+      - "127.0.0.1:${LOAD_AUTH_PORT}:9099"
+    volumes:
+      - ./load/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend: {condition: service_healthy}
+      frontend: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/nginx-health"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  frontend:
+    build: ./frontend
+    environment:
+      API_INTERNAL_URL: http://nginx:8081
+      TRUSTED_PROXY_CIDRS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+
+  backend:
+    build: ./backend
+    user: "${LOAD_UID}:${LOAD_GID}"
+    cpus: "${LOAD_API_CPUS}"
+    mem_limit: "${LOAD_API_MEMORY_MIB}m"
+    environment:
+      APP_ENV: development
+      AUTH_PUBLIC_URL: http://localhost:${LOAD_HTTP_PORT}
+      FIREBASE_PROJECT_ID: demo-mobile-tracer-load
+      FIREBASE_API_KEY: demo-api-key
+      FIREBASE_AUTH_DOMAIN: demo-mobile-tracer-load.firebaseapp.com
+      FIREBASE_APP_ID: demo-app-id
+      FIREBASE_AUTH_EMULATOR_HOST: firebase-auth:9099
+      FIREBASE_AUTH_EMULATOR_URL: http://localhost:${LOAD_AUTH_PORT}
+      DB_HOST: db
+      POSTGRES_DB: mobile_tracer_load
+      POSTGRES_USER: load
+      POSTGRES_PASSWORD: "${LOAD_DB_PASSWORD}"
+      DB_SSLMODE: disable
+      DB_MAX_OPEN_CONNS: "${LOAD_DB_CONNECTIONS}"
+      DB_MAX_IDLE_CONNS: "${LOAD_DB_CONNECTIONS}"
+      TAPYRUS_API_URL: https://mock-tapyrus:8443
+      TAPYRUS_API_TOKEN_FILE: /test-certs/token
+      TAPYRUS_API_CERT_FILE: /test-certs/client.crt
+      TAPYRUS_API_KEY_FILE: /test-certs/client.key
+      TAPYRUS_API_CA_FILE: /test-certs/ca.crt
+      TRUSTED_PROXY_CIDRS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    volumes:
+      - ./load/credentials/client:/test-certs:ro
+    depends_on:
+      db-migrate: {condition: service_completed_successfully}
+      firebase-auth: {condition: service_healthy}
+      mock-tapyrus: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/api/ready"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+
+  db:
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+    environment:
+      POSTGRES_DB: mobile_tracer_load
+      POSTGRES_USER: load
+      POSTGRES_PASSWORD: "${LOAD_DB_PASSWORD}"
+    volumes:
+      - load-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "load", "-d", "mobile_tracer_load"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  db-migrate:
+    image: migrate/migrate:v4.18.3@sha256:39b59b389634e43bb3f2d4e94bc1edef0775ec2a9a3540ce6a2cf330e5daae55
+    command: ["-path=/migrations", "-database=postgres://db:5432/?sslmode=disable", "up"]
+    environment: &pg
+      PGHOST: db
+      PGUSER: load
+      PGDATABASE: mobile_tracer_load
+      PGPASSWORD: "${LOAD_DB_PASSWORD}"
+    volumes:
+      - ./backend/db/migrations:/migrations:ro
+    depends_on:
+      db: {condition: service_healthy}
+
+  firebase-auth:
+    build: ./docker/firebase
+    init: true
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - >-
+        mkdir -p /data/snapshot &&
+        exec firebase emulators:start --only auth --project demo-mobile-tracer-load
+        --config /app/firebase.json --import /data/snapshot --export-on-exit /data/snapshot
+    volumes:
+      - load-firebase:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9099/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mock-tapyrus:
+    image: mobile-tracer-load-tools:local
+    build: ./load
+    user: "${LOAD_UID}:${LOAD_GID}"
+    command: ["python3", "/work/mock.py"]
+    environment:
+      MOCK_MODE: "${LOAD_MOCK_MODE}"
+      MOCK_DELAY_MS: "${LOAD_MOCK_DELAY_MS}"
+      MOCK_CONFIRM_SECONDS: "${LOAD_CONFIRM_SECONDS}"
+    volumes:
+      - ./load/credentials/server:/test-certs:ro
+      - ./load/state/mock:/state
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1',8443),2).close()"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  tools:
+    image: mobile-tracer-load-tools:local
+    build: ./load
+    profiles: [tools]
+    user: "${LOAD_UID}:${LOAD_GID}"
+    environment:
+      <<: *pg
+      LOAD_HTTP_PORT: "${LOAD_HTTP_PORT}"
+      LOAD_USER_PASSWORD: "${LOAD_USER_PASSWORD}"
+    volumes:
+      - ./load/state:/state
+      - ./load/config:/work/config:ro
+      - ./load/credentials/client:/test-certs:ro
+
+  k6:
+    image: grafana/k6:1.4.0
+    profiles: [tools]
+    user: "${LOAD_UID}:${LOAD_GID}"
+    environment:
+      LOAD_HTTP_PORT: "${LOAD_HTTP_PORT}"
+      LOAD_USER_PASSWORD: "${LOAD_USER_PASSWORD}"
+    volumes:
+      - ./load/scenario.js:/scenario.js:ro
+      - ./load/state:/state:ro
+      - ./load/results:/results
+
+  go-test:
+    build:
+      context: ./backend
+      target: build
+    profiles: [tools]
+    environment:
+      DB_HOST: db
+      POSTGRES_DB: mobile_tracer_load
+      POSTGRES_USER: load
+      POSTGRES_PASSWORD: "${LOAD_DB_PASSWORD}"
+      TEST_DATABASE: "1"
+      FIREBASE_AUTH_EMULATOR_HOST: firebase-auth:9099
+      FIREBASE_TEST_PROJECT_ID: demo-mobile-tracer-load
+    entrypoint: ["go", "test", "-count=1", "./internal/authn", "./internal/business", "./internal/tapyrusapi", "./internal/config"]
+
+  db-test:
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+    profiles: [tools]
+    environment: *pg
+    volumes:
+      - ./backend/db:/work:ro
+    entrypoint: ["bash", "/work/test/run.sh"]
+
+networks:
+  default:
+    internal: true
+  edge: {}
+
+volumes:
+  load-db:
+  load-firebase:
