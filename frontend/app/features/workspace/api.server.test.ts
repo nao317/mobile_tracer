@@ -80,6 +80,21 @@ describe("workspace server boundary", () => {
     );
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
+  it("forwards live photo uploads as multipart data", async () => {
+    const fetcher = fetchFixture((url, init) => {
+      expect(url).toBe(`/api/transactions/${demoId(40)}/media`);
+      expect(init?.method).toBe("POST");
+      expect(init?.body).toBeInstanceOf(FormData);
+      expect(new Headers(init?.headers).has("Content-Type")).toBe(false);
+      return Response.json({ data: { id: demoId(41) } }, { status: 201 });
+    });
+    const form = new FormData();
+    form.set("intent", "photo"); form.set("versionId", demoId(40)); form.set("_csrf", "submitted-csrf");
+    form.set("photo", new File(["image"], "photo.png", { type: "image/png" }));
+    const response = await mutateWorkspace(request(form));
+    expect(response).not.toBeInstanceOf(Response);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it("does not retry a mutation whose response was lost", async () => {
     const fetcher = fetchFixture(() => Promise.reject(new Error("network")));
     const form = new FormData();
@@ -142,6 +157,16 @@ function paths(fetcher: ReturnType<typeof fetchFixture>) {
 }
 
 describe("workspace pagination and fetch planning", () => {
+  it("loads persisted media for the live photo screen", async () => {
+    workspaceFixture((url) => {
+      if (url.pathname === `/api/${recordPath}/versions`) return page([version]);
+      if (url.pathname === `/api/transactions/${version.id}`)
+        return Response.json({ data: { content: { media: [{ id: demoId(990), position: "正面", created_at: "2026-11-09T00:00:00Z", device_captured_at: "2026-11-09T09:00:00+09:00", latitude: 33.59, longitude: 130.42, location_label: "博多駅", captured_at_source: "metadata", location_source: "search" }] } } });
+    });
+    const result = await load(`${recordPath}/photos`);
+    expect(result.data.snapshot.workflow?.photos[0]).toMatchObject({ position: "正面", locationLabel: "博多駅", latitude: 33.59 });
+    expect(result.data.requestKey).toMatch(/^[0-9a-f-]{36}$/);
+  });
   it.each(["", "vehicles/new", "settings/usage"])("fetches no business collections for %s", async (path) => {
     const fetcher = workspaceFixture();
     const result = await load(path);

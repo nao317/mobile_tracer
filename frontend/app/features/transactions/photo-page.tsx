@@ -1,7 +1,9 @@
-import { Field, Panel, TextField, Alert } from "../../components/ui/primitives";
+import { Panel, Alert } from "../../components/ui/primitives";
 import type { Transaction } from "./model";
 import { TransactionForm } from "./shared";
 import { Link } from "react-router";
+import { photoPositions } from "../workspace/preview-data";
+import { PhotoCaptureFields } from "./photo-capture-fields";
 export function PhotoPage({
   item,
   csrf,
@@ -27,8 +29,10 @@ export function PhotoPage({
               <br />
               撮影日時：{photo.device_captured_at ?? "端末申告なし"}
               <br />
+              撮影場所：{photo.location_label ?? "場所の記録なし"}
+              <br />
               SHA-256：
-              <code style={{ overflowWrap: "anywhere" }}>{photo.sha256}</code>
+              <code>{photo.sha256}</code>
             </figcaption>
           </figure>
         ))}
@@ -53,34 +57,7 @@ export function PhotoPage({
           <Panel title="写真を撮影・保存">
             <TransactionForm intent="photo" csrf={csrf} multipart>
               <input type="hidden" name="request_key" value={requestKey} />
-              <TextField
-                id="position"
-                name="position"
-                label="撮影箇所"
-                maxLength={100}
-                required
-              />
-              <Field id="photo" label="原本写真">
-                <input
-                  id="photo"
-                  name="photo"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  capture="environment"
-                  required
-                />
-              </Field>
-              <TextField
-                id="captured"
-                name="device_captured_at"
-                label="端末申告の撮影日時（任意・タイムゾーン付き）"
-                placeholder="2026-11-09T10:00:00+09:00"
-              />
-              <Alert>
-                位置情報は任意です。撮影場所を記録する場合のみ入力してください。
-              </Alert>
-              <TextField id="latitude" name="latitude" label="緯度（任意）" />
-              <TextField id="longitude" name="longitude" label="経度（任意）" />
+              <PhotoCaptureFields positions={photoPositions[content.case.case_type]} />
             </TransactionForm>
           </Panel>
         )}

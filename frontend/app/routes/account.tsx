@@ -91,17 +91,9 @@ export default function Account({
   return (
     <div className={uiStyles["ui-stack"]}>
       <PageHeader title={i18n.t("management.account")} />
-      <a href="/casework" className={uiStyles["ui-link-button"]}>案件・報告・依頼</a>
-      <a href="/transactions" className={uiStyles["ui-link-button"]}>取引・車両情報の確認</a>
-      <a href="/history-shares" className={uiStyles["ui-text-link"]}>共有された車両履歴</a>
       <p>
         {i18n.t("management.accountTypeLabel")}{i18n.enumLabel("accountType", session.user.account_type ?? "general")}
       </p>
-      <a href={session.user.account_type === "business" ? "/account/requests?view=companies" : "/account/requests?view=upgrade"} className={uiStyles["ui-link-button"]}>
-        {session.user.account_type === "business"
-          ? i18n.t("management.manageMyApplications")
-          : i18n.t("management.applyUpgrade")}
-      </a>
       {actionData?.error && <Alert tone="danger">{i18n.errorMessage(undefined)}</Alert>}
       <Panel title={i18n.t("management.workMembership")}>
         {session.memberships.length ? (
@@ -143,6 +135,14 @@ export default function Account({
         <a href="/app" className={uiStyles["ui-link-button"]}>
           {i18n.t("management.openWorkspace")}</a>
       )}
+      <a href="/casework" className={uiStyles["ui-link-button"]}>案件・報告・依頼</a>
+      <a href="/transactions" className={uiStyles["ui-link-button"]}>取引・車両情報の確認</a>
+      <a href="/history-shares" className={uiStyles["ui-text-link"]}>共有された車両履歴</a>
+      <a href={session.user.account_type === "business" ? "/account/requests?view=companies" : "/account/requests?view=upgrade"} className={uiStyles["ui-link-button"]}>
+        {session.user.account_type === "business"
+          ? i18n.t("management.manageMyApplications")
+          : i18n.t("management.applyUpgrade")}
+      </a>
     </div>
   );
 }

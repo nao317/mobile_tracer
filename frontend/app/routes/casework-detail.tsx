@@ -37,8 +37,15 @@ export default function CaseworkDetail({
     | { error?: string; message?: string; result?: { result?: string } }
     | undefined;
   const props = { item, csrf: session.csrf_token, requestKey };
+  const caseActions = item.case.status !== "in_progress" ? [] : item.can_manage ? [
+    { id: "work", label: "作業を提案", to: `/casework/${item.case.id}/work` },
+    { id: "report", label: "進捗を報告", to: `/casework/${item.case.id}/report` },
+  ] : item.start.customer_id === session.user.id ? [
+    { id: "incident", label: "インシデントを報告", to: `/casework/${item.case.id}/incident` },
+    { id: "request", label: "対応を依頼", to: `/casework/${item.case.id}/request` },
+  ] : [];
   return (
-    <CaseworkLayout session={session} caseID={item.case.id} title="案件の進行">
+    <CaseworkLayout session={session} caseID={item.case.id} caseActions={caseActions} title="案件の進行">
       <PageHeader
         title={item.vehicle.model_name ?? "案件の車両"}
         description={`案件の段階：${item.case.stage}`}

@@ -52,6 +52,11 @@ describe("photo upload availability", () => {
   it("allows photos for a draft in an active case", () => {
     show("in_progress");
     expect(screen.getByRole("button", { name: "写真を保存する" })).toBeEnabled();
+    expect(screen.getByLabelText("撮影日時")).toBeRequired();
+    expect(screen.getByLabelText("確定した撮影場所")).toBeRequired();
+    expect(screen.getByLabelText("撮影箇所")).toHaveDisplayValue("正面");
+    expect(screen.getByRole("option", { name: "左前" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/緯度|経度/)).toBeNull();
   });
 
   it.each(["completed", "cancelled"] as const)(

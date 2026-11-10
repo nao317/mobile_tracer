@@ -12,6 +12,8 @@ import {
 import { TransactionForm } from "../features/transactions/shared";
 import { Alert, PageHeader, Panel } from "../components/ui/primitives";
 import { AuthenticatedLayout } from "../components/templates/authenticated-layout";
+import { settingsNavigation } from "../features/settings/navigation";
+import { useTranslation } from "../components/ui/display-settings";
 const schema = z.object({
   data: z.array(
     z.object({
@@ -59,20 +61,12 @@ export default function HistoryShares({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
+  const t = useTranslation();
   return (
     <AuthenticatedLayout
       session={loaderData.session}
       title="履歴の共有"
-      groups={[
-        {
-          id: "history",
-          label: "履歴",
-          items: [
-            { id: "shares", label: "共有履歴", to: "/history-shares" },
-            { id: "transactions", label: "取引一覧", to: "/transactions" },
-          ],
-        },
-      ]}
+      groups={settingsNavigation(t, loaderData.session)}
     >
       <div className={uiStyles["ui-stack"]}>
         <PageHeader title="履歴の共有と受け入れ" />

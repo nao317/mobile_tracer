@@ -253,6 +253,23 @@ test.describe("UI preview", () => {
   test("a photo upload can fail and is then blocked from submission", async ({
     page,
   }) => {
+    const pixel = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5S0AAAAASUVORK5CYII=",
+      "base64",
+    );
+    await page.route("**/api/location-search?**", async route => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("map") === "1")
+        await route.fulfill({ status: 200, contentType: "image/png", body: pixel });
+      else
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: [{ name: "博多駅", address: "福岡県福岡市博多区", latitude: 33.59, longitude: 130.42 }] }) });
+    });
+    async function confirmLocation() {
+      await page.getByLabel("撮影場所", { exact: true }).fill("博多駅");
+      await page.getByRole("button", { name: /博多駅/ }).click();
+      await page.getByRole("button", { name: "地図で位置を確認" }).click();
+      await page.getByRole("button", { name: "この場所に決定" }).click();
+    }
     await page.goto(
       `/preview/cases/${demoCaseIds[0]}/records/${demoId(32)}/photos`,
     );
@@ -265,6 +282,7 @@ test.describe("UI preview", () => {
         "base64",
       ),
     });
+    await confirmLocation();
     await page.getByRole("button", { name: "写真をプレビューに反映" }).click();
     await page.getByRole("main").getByRole("link", { name: "撮影一覧", exact: true }).click();
     await expect(page.getByRole("img", { name: "正面の撮影原本", exact: true })).toBeVisible();
@@ -273,6 +291,7 @@ test.describe("UI preview", () => {
       name: "sample.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5S0AAAAASUVORK5CYII=", "base64"),
     });
+    await confirmLocation();
     await page.getByLabel("送信失敗の表示を試す（プレビュー用）").check();
     await page.getByRole("button", { name: "写真をプレビューに反映" }).click();
     await page.getByRole("main").getByRole("link", { name: "撮影一覧", exact: true }).click();

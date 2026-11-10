@@ -26,14 +26,17 @@ export function AuthenticatedLayout({ children, groups: suppliedGroups, session,
   const active = groups.flatMap(group => group.items.map(item => ({ group: group.id, path: item.to.split("?")[0] })))
     .filter(item => item.path === location.pathname || (item.path !== "/app" && item.path !== "/preview" && location.pathname.startsWith(item.path + "/")))
     .sort((a, b) => b.path.length - a.path.length)[0]?.group;
-  const [openGroup, setOpenGroup] = useState<{ active?: string; id?: string }>({});
-  const selectedGroup = openGroup.active === active ? openGroup.id ?? active : active;
+  const [groupState, setGroupState] = useState<Record<string, boolean>>({});
   function close() { dialog.current?.close(); }
   function isCurrent(to: string) {
     const [path, query] = to.split("?");
-    if (path !== location.pathname) return false;
+    if (path !== location.pathname && (path === "/app" || !location.pathname.startsWith(path + "/"))) return false;
     const current = new URLSearchParams(location.search);
     if (query) return [...new URLSearchParams(query)].every(([key, value]) => current.get(key) === value);
+    if (groups.some(group => group.items.some(item => {
+      const [otherPath] = item.to.split("?");
+      return otherPath.length > path.length && (otherPath === location.pathname || location.pathname.startsWith(otherPath + "/"));
+    }))) return false;
     return !groups.some(group => group.items.some(item => {
       const [otherPath, otherQuery] = item.to.split("?");
       return otherPath === path && !!otherQuery && [...new URLSearchParams(otherQuery)].every(([key, value]) => current.get(key) === value);
@@ -64,10 +67,10 @@ export function AuthenticatedLayout({ children, groups: suppliedGroups, session,
             {group.items[0].label}
           </Link>
         ) : <>
-        <button type="button" className={styles.groupButton} aria-expanded={selectedGroup === group.id} aria-controls={`${prefix}-${group.id}`} onClick={() => setOpenGroup({ active, id: selectedGroup === group.id ? "" : group.id })}>
+        <button type="button" className={styles.groupButton} aria-expanded={groupState[group.id] ?? active === group.id} aria-controls={`${prefix}-${group.id}`} onClick={() => setGroupState(value => ({ ...value, [group.id]: !(value[group.id] ?? active === group.id) }))}>
           {group.label}<ChevronDown size={16} aria-hidden="true" />
         </button>
-        <div className={styles.links} id={`${prefix}-${group.id}`} hidden={selectedGroup !== group.id}>
+        <div className={styles.links} id={`${prefix}-${group.id}`} hidden={!(groupState[group.id] ?? active === group.id)}>
           {group.items.map(item => <Link className={styles.link} key={item.id} to={item.to} aria-current={isCurrent(item.to) ? "page" : undefined}>{item.label}</Link>)}
         </div>
         </>}

@@ -237,7 +237,7 @@ export async function loadWorkspace(request: Request, path: string) {
       snapshot.relatedPagination = related.pagination;
     }
   } else if (
-    ["case", "case-records", "case-manage", "record-new", "record", "record-edit", "record-history"].includes(screen.key)
+    ["case", "case-records", "case-manage", "record-new", "record", "record-edit", "record-history", "photos"].includes(screen.key)
   ) {
     const recordPath = `/api/cases/${screen.params.caseId}/records`;
     const recordsQuery =
@@ -315,7 +315,38 @@ export async function loadWorkspace(request: Request, path: string) {
         );
         snapshot.selectedVersion = latest.data[0] ?? null;
       }
-    }
+      if (screen.key === "photos" && snapshot.selectedVersion) {
+        const transaction = await read(
+          request,
+          auth,
+          `/api/transactions/${snapshot.selectedVersion.id}`,
+          z.object({ data: z.object({ content: z.object({ media: z.array(z.object({
+            id: z.string(), position: z.string(), created_at: z.string(),
+            device_captured_at: z.string().nullable(), latitude: z.number().nullable(), longitude: z.number().nullable(),
+            location_label: z.string().nullable().optional(), captured_at_source: z.string().nullable().optional(), location_source: z.string().nullable().optional(),
+          })) }) }) }),
+        );
+        snapshot.workflow = {
+          photos: transaction.data.content.media.map(photo => ({
+            id: photo.id,
+            versionId: snapshot.selectedVersion!.id,
+            position: photo.position,
+            name: photo.position,
+            status: "saved" as const,
+            note: "",
+            receivedAt: photo.created_at,
+            capturedAt: photo.device_captured_at ?? undefined,
+            capturedAtSource: photo.captured_at_source ?? undefined,
+            locationLabel: photo.location_label ?? undefined,
+            locationSource: photo.location_source ?? undefined,
+            latitude: photo.latitude ?? undefined,
+            longitude: photo.longitude ?? undefined,
+            src: `/api/transactions/${snapshot.selectedVersion!.id}/media/${photo.id}`,
+          })),
+          answers: [], disputes: [], shares: [], registration: {}, verification: {}, audit: [], management: [],
+        };
+      }
+  }
   }
 
   return data(
@@ -325,6 +356,7 @@ export async function loadWorkspace(request: Request, path: string) {
       csrf: auth.session.csrf_token,
       email: auth.session.user.email,
       preview: previewEnabled(),
+      requestKey: crypto.randomUUID(),
     },
     { headers: auth.headers },
   );
@@ -358,6 +390,27 @@ export async function mutateWorkspace(request: Request) {
   const form = await request.formData();
   const intent = str(form, "intent");
   try {
+    if (intent === "photo") {
+      const versionId = parse(idSchema, form.get("versionId"));
+      const response = await apiFetch(request, `/api/transactions/${versionId}/media`, auth.cookie, {
+        method: "POST",
+        headers: {
+          Origin: request.headers.get("Origin") || "",
+          Referer: request.headers.get("Referer") || "",
+          "X-CSRF-Token": str(form, "_csrf"),
+        },
+        body: form,
+      });
+      if (!response.ok) {
+        const parsed = errorSchema.safeParse(await response.json().catch(() => null));
+        return data<CommandResult>({
+          code: parsed.success ? parsed.data.error.code : "photo_upload_failed",
+          error: "画像を保存できませんでした。入力内容を確認してください。",
+          fields: parsed.success ? parsed.data.error.fields : undefined,
+        }, { status: response.status, headers: auth.headers });
+      }
+      return data<CommandResult>({ message: "画像を保存しました。" }, { headers: auth.headers });
+    }
     let method = "POST",
       path = "",
       body: object = {},

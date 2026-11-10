@@ -14,6 +14,8 @@ import type { FirebaseConfig } from "../../lib/auth.server";
 import { copy, type Language, type Theme, type Failure } from "./messages";
 import { useOptionalDisplaySettings } from "../../components/ui/display-settings";
 
+export const loginSuccessPath = "/app";
+
 function authError(error: unknown): Exclude<Failure, ""> {
   const code =
     error && typeof error === "object" && "code" in error ? error.code : "";
@@ -148,7 +150,7 @@ export function useLogin({
           return;
         }
         await exchange(credential.user);
-        window.location.assign("/account");
+        window.location.assign(loginSuccessPath);
       } finally {
         await signOut(auth);
       }

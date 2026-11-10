@@ -44,6 +44,8 @@ describe("workspace route registry", () => {
     context.principal.roles = [{ role: "auditor", store_id: null }];
     const groups = workspaceNavigation({ base: "/app", mode: "live", context, caseId: "case-id", recordId: "record-id" }, createTranslator("en"));
     const links = groups.flatMap(group => group.items);
+    expect(groups.some(group => group.id === "vehicles")).toBe(false);
+    expect(groups.find(group => group.id === "transactions")?.items.map(item => item.id)).toContain("vehicles");
     expect(links.map(link => link.id)).toEqual(expect.arrayContaining(["case-records", "record", "record-history"]));
     expect(links.map(link => link.id)).not.toEqual(expect.arrayContaining(["case-new"]));
     for (const id of ["vehicle-new", "case-new", "case-manage", "record-edit", "photos", "submit", "correct", "case-participants", "configuration"])

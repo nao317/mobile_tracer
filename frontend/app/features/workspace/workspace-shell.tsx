@@ -26,7 +26,7 @@ export function WorkspaceShell({ children, screen }: { children: ReactNode; scre
     }
     return { ...item, to: `${item.to}${query.size ? `?${query}` : ""}` };
   }) }));
-  const common = settingsNavigation(t, root?.session).filter(group => !["home", "vehicles", "cases"].includes(group.id));
+  const common = settingsNavigation(t, root?.session);
   const grouped = new Map(business.map(group => [group.id, { ...group, items: [...group.items] }]));
   for (const group of common) {
     const existing = grouped.get(group.id);

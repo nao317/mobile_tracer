@@ -16,6 +16,7 @@ export default [
   route("settings", "routes/settings.tsx"),
   route("settings/display", "routes/settings-display.tsx"),
   route("licenses", "routes/licenses.tsx"),
+  route("api/location-search", "routes/location-search.ts"),
   route("admin", "routes/admin.tsx", [
     index("routes/admin-overview.tsx"),
     route("users", "routes/admin-users.tsx"),

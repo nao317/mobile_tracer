@@ -9,36 +9,30 @@ import {
 } from "../../components/ui/primitives";
 import type { SessionView } from "../../lib/auth.server";
 import uiStyles from "../../components/ui/ui.module.css";
+import { useTranslation } from "../../components/ui/display-settings";
+import { settingsNavigation } from "../settings/navigation";
 export function CaseworkLayout({
   session,
   caseID,
+  caseActions = [],
   title,
   children,
 }: {
   session: SessionView;
   caseID?: string;
+  caseActions?: { id: string; label: string; to: string }[];
   title: string;
   children: ReactNode;
 }) {
+  const t = useTranslation();
   const base = caseID ? `/casework/${caseID}` : "/casework";
+  const groups = settingsNavigation(t, session);
   return (
     <AuthenticatedLayout
       session={session}
       title={title}
       groups={[
-        {
-          id: "cases",
-          label: "案件",
-          items: [
-            { id: "list", label: "案件一覧", to: "/casework" },
-            { id: "inbox", label: "開始条件の受信履歴", to: "/casework/inbox" },
-            ...(session.user.account_type === "business"
-              ? [{ id: "new", label: "案件開始の提案", to: "/casework/new" }]
-              : []),
-            { id: "records", label: "車両の記録・写真", to: "/transactions" },
-            { id: "account", label: "アカウント", to: "/account" },
-          ],
-        },
+        ...groups,
         ...(caseID
           ? [
               {
@@ -51,6 +45,7 @@ export function CaseworkLayout({
                     label: "進行・対応履歴",
                     to: base + "/timeline",
                   },
+                  ...caseActions,
                   {
                     id: "verification",
                     label: "登録・検証",

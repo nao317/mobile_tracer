@@ -5,9 +5,24 @@ import type { useTranslation } from "../../components/ui/display-settings";
 export function settingsNavigation(t: ReturnType<typeof useTranslation>, session?: SessionView | null): NavigationGroup[] {
   return [
     { id: "home", label: t("navigation.home"), items: [{ id: "home", label: t("navigation.home"), to: "/app" }] },
-    ...(session?.selected_staff_id ? [
-      { id: "vehicles", label: t("navigation.vehicles"), items: [{ id: "vehicles", label: t("navigation.vehicles"), to: "/app/vehicles" }] },
-      { id: "cases", label: t("navigation.cases"), items: [{ id: "cases", label: t("navigation.cases"), to: "/app/cases" }] },
+    ...(session ? [
+      { id: "cases", label: t("navigation.cases"), items: [
+        ...(session.selected_staff_id ? [
+          { id: "cases", label: t("navigation.caseRecords"), to: "/app/cases" },
+        ] : []),
+        { id: "casework", label: t("navigation.caseworkList"), to: "/casework" },
+        { id: "casework-inbox", label: t("navigation.caseworkInbox"), to: "/casework/inbox" },
+        ...(session.user.account_type === "business" && session.selected_staff_id ? [
+          { id: "casework-new", label: t("navigation.caseworkNew"), to: "/casework/new" },
+        ] : []),
+      ] },
+      { id: "transactions", label: t("navigation.transactions"), items: [
+        ...(session.selected_staff_id ? [
+          { id: "vehicles", label: t("screen.vehicles"), to: "/app/vehicles" },
+        ] : []),
+        { id: "transactions", label: t("navigation.transactionList"), to: "/transactions" },
+        { id: "history-shares", label: t("navigation.sharedHistory"), to: "/history-shares" },
+      ] },
     ] : []),
     { id: "settings", label: t("navigation.settings"), items: [
       { id: "settings", label: t("navigation.settings"), to: "/settings" },

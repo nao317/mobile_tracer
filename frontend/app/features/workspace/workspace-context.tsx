@@ -17,6 +17,7 @@ type Environment = {
   csrf: string;
   email: string;
   previewAvailable: boolean;
+  requestKey?: string;
   execute?: (form: FormData) => CommandResult;
   reset?: () => void;
   changeRole?: (role: Role) => void;
