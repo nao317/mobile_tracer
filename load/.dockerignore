@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!mock.py
+!data.py
+!seed.sql
+!test_data.py
+!config/
+!config/*.json

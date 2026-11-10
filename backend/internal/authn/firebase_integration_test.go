@@ -25,7 +25,11 @@ func TestFirebaseEmulator(t *testing.T) {
 	if host == "" {
 		t.Skip("set FIREBASE_AUTH_EMULATOR_HOST for official Firebase SDK integration")
 	}
-	cfg := config.Auth{Enabled: true, PublicURL: "http://app.example", ProjectID: "demo-mobile-tracer", SessionTTL: time.Hour, AdminEmails: map[string]bool{}}
+	projectID := os.Getenv("FIREBASE_TEST_PROJECT_ID")
+	if projectID == "" {
+		projectID = "demo-mobile-tracer"
+	}
+	cfg := config.Auth{Enabled: true, PublicURL: "http://app.example", ProjectID: projectID, SessionTTL: time.Hour, AdminEmails: map[string]bool{}}
 	provider, err := authn.Firebase(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)

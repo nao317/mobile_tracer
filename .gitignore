@@ -22,3 +22,9 @@ __pycache__/
 /firebase-debug.*.log
 /auth-debug.log
 /.firebase/
+
+# Isolated load test runtime files
+/.env.load
+/load/state/
+/load/results/
+/load/credentials/
