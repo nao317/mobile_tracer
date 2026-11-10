@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -71,6 +73,21 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 	defer func() {
 		runErr = errors.Join(runErr, db.Close())
 	}()
+	if os.Getenv("LOAD_DB_POOL_METRICS") == "1" {
+		if apiAuth.Environment != "development" || identityCfg.ProjectID != "demo-mobile-tracer-load" ||
+			dbCfg.Name != "mobile_tracer_load" || timestampCfg.URL != "https://mock-tapyrus:8443" {
+			return errors.New("DB pool metrics require the dedicated load environment")
+		}
+		pool, err := db.GORM.DB()
+		if err != nil {
+			return errors.New("get load-test PostgreSQL pool failed")
+		}
+		closeMetrics, err := listenLoadPoolMetrics(pool, logger)
+		if err != nil {
+			return err
+		}
+		defer func() { runErr = errors.Join(runErr, closeMetrics()) }()
+	}
 	checks := []func(context.Context) error{db.Ping}
 	if timestampClient != nil {
 		checks = append(checks, timestampClient.Check)
@@ -125,4 +142,23 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 	}
 	logger.Info("API server stopped")
 	return nil
+}
+
+func listenLoadPoolMetrics(pool *sql.DB, logger *slog.Logger) (func() error, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:9469")
+	if err != nil {
+		return nil, fmt.Errorf("listen for load DB pool metrics: %w", err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /db-pool", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(pool.Stats())
+	})
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: time.Second}
+	go func() {
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Warn("load DB pool metrics server stopped")
+		}
+	}()
+	return srv.Close, nil
 }
