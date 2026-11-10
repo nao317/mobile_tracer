@@ -15,6 +15,8 @@ import { ApprovalPage } from "../features/transactions/approval-page";
 import { VerificationPage } from "../features/transactions/verification-page";
 import { HistoryPage } from "../features/transactions/history-page";
 import { CorrectionPage } from "../features/transactions/correction-page";
+import { settingsNavigation } from "../features/settings/navigation";
+import { useTranslation } from "../components/ui/display-settings";
 const features = [
   "photos",
   "present",
@@ -45,6 +47,7 @@ export default function TransactionDetail({
   actionData,
   params,
 }: Route.ComponentProps) {
+  const t = useTranslation();
   const { item, csrf, requestKey, owners, user, session } = loaderData;
   const feedback = actionData as
     | {
@@ -67,14 +70,7 @@ export default function TransactionDetail({
             to: `/transactions/${params.versionId}/${feature}`,
           })),
         },
-        {
-          id: "account",
-          label: "一覧",
-          items: [
-            { id: "transactions", label: "取引一覧", to: "/transactions" },
-            { id: "account", label: "アカウント", to: "/account" },
-          ],
-        },
+        ...settingsNavigation(t, session),
       ]}
     >
       <div className={uiStyles["ui-stack"]}>

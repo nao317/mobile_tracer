@@ -16,6 +16,7 @@ import { Pagination } from "../../components/molecules/pagination";
 import { WorkflowViews, useClientPage } from "./workflow-navigation";
 import { useI18n } from "../../components/ui/display-settings";
 import { useCaseVersion, VersionPicker, PhotoCard } from "./workflow-common";
+import { PhotoCaptureFields } from "../transactions/photo-capture-fields";
 export function PhotosScreen({
   item,
   recordId,
@@ -24,7 +25,7 @@ export function PhotosScreen({
   recordId: string;
 }) {
   const { t } = useI18n();
-  const { snapshot } = useWorkspace();
+  const { snapshot, requestKey, mode } = useWorkspace();
   const { versions, version } = useCaseVersion(item, recordId);
   const [search] = useSearchParams();
   const view = search.get("view") || "overview";
@@ -36,7 +37,7 @@ export function PhotosScreen({
     editable = version.status === "draft" && canWrite(snapshot.context, item);
   return (
     <>
-      <WorkflowViews selected={view} items={[{ view: "overview", label: "workflow.nav.overview" }, { view: "capture", label: "workflow.nav.capture" }, { view: "exception", label: "workflow.nav.exception" }, { view: "retry", label: "workflow.nav.retry" }]} />
+      <WorkflowViews selected={view} items={[{ view: "overview", label: "workflow.nav.overview" }, { view: "capture", label: "workflow.nav.capture" }, ...(mode === "preview" ? [{ view: "exception", label: "workflow.nav.exception" as const }] : []), { view: "retry", label: "workflow.nav.retry" }]} />
       <Panel title={t("workflow.photos")}>
         <VersionPicker versions={versions} selected={version} />
         <p className={`${uiStyles["ui-muted"]} ${appStyles["mt-4"]}`}>
@@ -51,33 +52,20 @@ export function PhotosScreen({
           ))}
         </div><Pagination pagination={positions.pagination} pageKey="photoPage" /></>}
       </Panel>
-      {editable && ["capture", "exception", "retry"].includes(view) && (
+      {editable && ["capture", "retry", ...(mode === "preview" ? ["exception"] : [])].includes(view) && (
         <Panel title={t("workflow.addPhoto")}>
           <CommandForm
             intent="photo"
-            hidden={{ caseId: item.id, recordId, versionId: version.id }}
+            hidden={{ caseId: item.id, recordId, versionId: version.id, ...(requestKey ? { request_key: requestKey } : {}) }}
+            multipart
           >
-            <Field id="photo-position" label={t("workflow.photoPosition")}>
+            {view !== "exception" ? <PhotoCaptureFields positions={photoPositions[item.case_type]} initialPosition={search.get("position") ?? undefined} /> : <><Field id="photo-position" label={t("workflow.photoPosition")}>
               <Select id="photo-position" name="position" defaultValue={search.get("position") ?? undefined}>
                 {photoPositions[item.case_type].map((p) => (
                   <option key={p} value={p}>{workflowLabel(t, p)}</option>
                 ))}
               </Select>
-            </Field>
-            <Field
-              id="photo"
-              label={t("workflow.originalPhoto")}
-              hint={t("workflow.photoFileHint")}
-            >
-              <input
-                id="photo"
-                type="file"
-                name="photo"
-                accept="image/jpeg,image/png,image/webp"
-                capture="environment"
-                className={uiStyles["ui-input"]}
-              />
-            </Field>
+            </Field></>}
             <TextField
               id="photo-note"
               name="note"
@@ -89,9 +77,9 @@ export function PhotosScreen({
                 <input type="checkbox" name="exception" value="1" />
                 {t("workflow.approveException")}</label>
             )}
-            <label className={workspaceStyles["workspace-check"]}>
+            {mode === "preview" && <label className={workspaceStyles["workspace-check"]}>
               <input type="checkbox" name="simulateFailure" value="1" />
-              {t("workflow.simulateFailure")}</label>
+              {t("workflow.simulateFailure")}</label>}
             <CommandSubmit>{t("workflow.savePhoto")}</CommandSubmit>
           </CommandForm>
         </Panel>

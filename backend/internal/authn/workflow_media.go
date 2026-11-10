@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -47,23 +48,22 @@ func (s *Service) uploadWorkflowMedia(c *echo.Context) error {
 	if !business.ValidID(key) || len(position) == 0 || len(position) > 100 {
 		return business.Invalid("position", "撮影箇所と再送キーを指定してください。")
 	}
-	var captured *time.Time
-	if raw := c.FormValue("device_captured_at"); raw != "" {
-		v, e := time.Parse(time.RFC3339, raw)
-		if e != nil {
-			return business.Invalid("device_captured_at", "日時を確認してください。")
-		}
-		captured = &v
+	rawCaptured := c.FormValue("device_captured_at")
+	captured, parseErr := time.Parse(time.RFC3339, rawCaptured)
+	if parseErr != nil {
+		return business.Invalid("device_captured_at", "撮影日時をRFC3339形式で指定してください。")
 	}
-	var latitude, longitude *float64
-	if c.FormValue("latitude") != "" || c.FormValue("longitude") != "" {
-		lat, e1 := strconv.ParseFloat(c.FormValue("latitude"), 64)
-		lon, e2 := strconv.ParseFloat(c.FormValue("longitude"), 64)
-		if e1 != nil || e2 != nil || !(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-			return business.Invalid("latitude", "緯度・経度を確認してください。")
-		}
-		latitude = &lat
-		longitude = &lon
+	lat, e1 := strconv.ParseFloat(c.FormValue("latitude"), 64)
+	lon, e2 := strconv.ParseFloat(c.FormValue("longitude"), 64)
+	if e1 != nil || e2 != nil || !(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+		return business.Invalid("latitude", "撮影場所を指定し、緯度・経度を確認してください。")
+	}
+	locationLabel := strings.TrimSpace(c.FormValue("location_label"))
+	capturedSource, locationSource := c.FormValue("captured_at_source"), c.FormValue("location_source")
+	validCapturedSource := capturedSource == "metadata" || capturedSource == "device" || capturedSource == "manual"
+	validLocationSource := locationSource == "metadata" || locationSource == "device" || locationSource == "search"
+	if locationLabel == "" || len([]rune(locationLabel)) > 500 || !validCapturedSource || !validLocationSource {
+		return business.Invalid("location_label", "撮影場所と取得方法を確認してください。")
 	}
 	var id string
 	err = s.db.WithContext(c.Request().Context()).Transaction(func(tx *gorm.DB) error {
@@ -82,6 +82,21 @@ func (s *Service) uploadWorkflowMedia(c *echo.Context) error {
 		if !workflowWriteAllowed(p, item) {
 			return business.Forbidden()
 		}
+		positions := map[string][]string{
+			"rental": {"正面", "右前", "右後", "後面", "左後", "左前"},
+			"dealer": {"正面", "右前", "右側面", "右後", "後面", "左後", "左側面", "左前"},
+			"repair": {"正面", "右前", "右後", "後面", "左後", "左前"},
+		}
+		validPosition := false
+		for _, candidate := range positions[item.CaseType] {
+			if position == candidate {
+				validPosition = true
+				break
+			}
+		}
+		if !validPosition {
+			return business.Invalid("position", "案件の撮影箇所を選択してください。")
+		}
 		var locked struct{ ID string }
 		if err = tx.Table("app.cases").Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=?", v.CaseID).Take(&locked).Error; err != nil {
 			return err
@@ -90,10 +105,17 @@ func (s *Service) uploadWorkflowMedia(c *echo.Context) error {
 		if err != nil {
 			return err
 		}
-		var old struct{ ID, RecordVersionID, Position, SHA256 string }
+		var old struct {
+			ID, RecordVersionID, Position, SHA256           string
+			DeviceCapturedAt                                time.Time
+			Latitude, Longitude                             float64
+			LocationLabel, CapturedAtSource, LocationSource string
+		}
 		err = tx.Table("app.workflow_media").Where("tenant_id=? AND request_key=?", v.TenantID, key).Take(&old).Error
 		if err == nil {
-			if old.RecordVersionID != v.ID || old.Position != position || old.SHA256 != digest(string(data)) {
+			if old.RecordVersionID != v.ID || old.Position != position || old.SHA256 != digest(string(data)) ||
+				!old.DeviceCapturedAt.Equal(captured) || old.Latitude != lat || old.Longitude != lon ||
+				old.LocationLabel != locationLabel || old.CapturedAtSource != capturedSource || old.LocationSource != locationSource {
 				return business.Conflict("再送キーが別の画像に使用されています。")
 			}
 			id = old.ID
@@ -105,7 +127,7 @@ func (s *Service) uploadWorkflowMedia(c *echo.Context) error {
 		if v.Status != "draft" || item.Status != "in_progress" {
 			return business.Conflict("進行中の下書きにだけ画像を追加できます。")
 		}
-		err = tx.Raw(`INSERT INTO app.workflow_media(tenant_id,case_id,record_version_id,request_key,position,mime_type,bytes,sha256,actor_id,device_captured_at,latitude,longitude) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`, v.TenantID, v.CaseID, v.ID, key, position, mime, data, digest(string(data)), a.User.ID, captured, latitude, longitude).Scan(&id).Error
+		err = tx.Raw(`INSERT INTO app.workflow_media(tenant_id,case_id,record_version_id,request_key,position,mime_type,bytes,sha256,actor_id,device_captured_at,latitude,longitude,location_label,captured_at_source,location_source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`, v.TenantID, v.CaseID, v.ID, key, position, mime, data, digest(string(data)), a.User.ID, captured, lat, lon, locationLabel, capturedSource, locationSource).Scan(&id).Error
 		if err != nil {
 			return err
 		}

@@ -26,6 +26,10 @@ See the [root README](../README.md) for optional direct access with `compose.deb
 
 SSRは`API_INTERNAL_URL`へCookieを転送します。Composeでは`http://backend:8080`、フロントだけをホストで開発する場合は通常`http://localhost:8081`です。`AUTH_PUBLIC_URL`はブラウザーが利用するオリジンに合わせます。セッション作成などの`/api/`へのアクセスも同じオリジンへ転送する構成にしてください。設定と手動確認は[認証の手順](../docs/auth.md)を参照してください。
 
+### 撮影場所検索
+
+撮影場所の住所・施設検索と地図確認にはGeoapifyを利用します。`GEOAPIFY_API_KEY`を`.env`（公開構成は`.env.public`）へ設定してください。キーはフロントエンドのSSRサーバーだけが保持し、ブラウザーには公開しません。未設定時は画像と入力内容を保持したまま、場所検索を設定待ちとして表示します。Freeプランはクレジットカード不要で1日3,000クレジット、最大5リクエスト/秒です。利用量のソフト上限とGeoapify・地図データの帰属表示を含む最新条件は、運用開始前に公式Pricingを確認してください。
+
 ### Installation
 
 Install the dependencies:

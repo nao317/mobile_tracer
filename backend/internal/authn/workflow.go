@@ -25,6 +25,9 @@ type workflowMedia struct {
 	DeviceCapturedAt *time.Time `json:"device_captured_at"`
 	Latitude         *float64   `json:"latitude"`
 	Longitude        *float64   `json:"longitude"`
+	LocationLabel    *string    `json:"location_label"`
+	CapturedAtSource *string    `json:"captured_at_source"`
+	LocationSource   *string    `json:"location_source"`
 	CreatedAt        time.Time  `json:"created_at"`
 }
 type workflowRequest struct {

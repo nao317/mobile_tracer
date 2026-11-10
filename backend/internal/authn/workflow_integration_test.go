@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func workflowRecord(h *rig, j jar) business.RecordCreated {
 	h.expect(w, 201)
 	return managementData[business.RecordCreated](h.t, w)
 }
-func workflowPhoto(h *rig, j jar, version, key string) string {
+func workflowPhotoRequest(h *rig, j jar, version, key string, context bool) *httptest.ResponseRecorder {
 	h.t.Helper()
 	var b bytes.Buffer
 	writer := multipart.NewWriter(&b)
@@ -34,13 +35,26 @@ func workflowPhoto(h *rig, j jar, version, key string) string {
 	// PNG signature and IHDR; content type must be derived from bytes, not filename.
 	_, _ = f.Write([]byte("\x89PNG\r\n\x1a\n" + strings.Repeat("x", 100)))
 	_ = writer.WriteField("request_key", key)
-	_ = writer.WriteField("position", "front")
+	_ = writer.WriteField("position", "正面")
+	if context {
+		_ = writer.WriteField("device_captured_at", "2026-11-09T10:20:30+09:00")
+		_ = writer.WriteField("captured_at_source", "metadata")
+		_ = writer.WriteField("latitude", "33.641667")
+		_ = writer.WriteField("longitude", "130.687500")
+		_ = writer.WriteField("location_label", "九州工業大学 飯塚キャンパス")
+		_ = writer.WriteField("location_source", "search")
+	}
 	_ = writer.Close()
 	w := h.call("POST", "/api/transactions/"+version+"/media", "", j, func(r *http.Request) {
 		r.Body = io.NopCloser(bytes.NewReader(b.Bytes()))
 		r.ContentLength = int64(b.Len())
 		r.Header.Set("Content-Type", writer.FormDataContentType())
 	})
+	return w
+}
+func workflowPhoto(h *rig, j jar, version, key string) string {
+	h.t.Helper()
+	w := workflowPhotoRequest(h, j, version, key, true)
 	h.expect(w, 201)
 	return managementData[struct {
 		ID string `json:"id"`
@@ -55,6 +69,7 @@ func TestCustomerWorkflowPostgres(t *testing.T) {
 	id := record.Draft.ID
 	path := "/api/transactions/" + id
 	h.expect(h.call("GET", path, "", customer, nil), 404)
+	h.expect(workflowPhotoRequest(h, staff, id, uid(919), false), 400)
 	media := workflowPhoto(h, staff, id, uid(920))
 	if got := workflowPhoto(h, staff, id, uid(920)); got != media {
 		t.Fatal("duplicate media")

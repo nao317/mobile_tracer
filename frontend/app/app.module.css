@@ -8,7 +8,7 @@
 .global-display-controls { display: flex; align-items: center; gap: 8px; }
 .global-display-button { display: inline-flex; align-items: center; justify-content: center; width: var(--ui-control-size); height: var(--ui-control-size); min-width: var(--ui-control-size); min-height: var(--ui-control-size); flex-shrink: 0; border: 1px solid var(--ui-border); border-radius: 100px; background: var(--ui-surface); color: var(--ui-text); font: 700 15px/1.5 var(--font-sans); cursor: pointer; }
 .global-display-button:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px; }
-.dashboard-title { font-family: "Zen Dots", var(--font-sans); }
+.dashboard-title { font-family: var(--font-sans); }
 .dashboard-title { font-size: clamp(1.65rem, 4vw, 2rem); font-weight: 700; }
 /* Small layout helpers shared by management screens. */
 .mt-4 { margin-top: 1rem; }
