@@ -260,7 +260,7 @@ export function workspaceNavigation(
     if (items.length) groups.push({ id, label: translate(label), items });
   };
   add("home", "navigation.home", ["dashboard", "tasks"]);
-  add("vehicles", "navigation.vehicles", ["vehicles", "vehicle-new"]);
+  add("transactions", "navigation.transactions", ["vehicles", "vehicle-new"]);
   add("cases", "navigation.cases", ["cases", "case-new"]);
   if (caseId) {
     add("case", "navigation.caseActions", ["case", "case-records", "case-participants", "case-manage"]);

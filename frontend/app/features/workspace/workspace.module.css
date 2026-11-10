@@ -250,10 +250,10 @@
   }
 }
 
-.workspace-logo-mark { font: 400 15px/1 "Zen Dots", var(--font-sans); letter-spacing: 0; }
+.workspace-logo-mark { font: 400 15px/1 var(--font-sans); letter-spacing: 0; }
 .workspace-tabs { border-bottom: 1.5px solid var(--ui-border-strong); }
 .workspace-tabs a { border: 1.5px solid var(--ui-border-strong); }
 .workspace-details { border-color: var(--ui-border-strong); }
-.workspace h3 { font-family: "Zen Dots", var(--font-sans); }
+.workspace h3 { font-family: var(--font-sans); }
 
 .workspace-filter .uiInput { font-size: 17px; }

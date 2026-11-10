@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
+import type { Locator } from "@playwright/test";
 
 test.skip(!!process.env.PLAYWRIGHT_BASE_URL || !!process.env.API_INTERNAL_URL, "Local auth fixture only");
+
+async function openGroup(nav: Locator, name: string) {
+  const group = nav.getByRole("button", { name, exact: true });
+  if (await group.getAttribute("aria-expanded") !== "true") await group.click();
+}
 
 test("business navigation survives transitions from preview to licenses and home", async ({ page, context, baseURL }) => {
   await context.addCookies([{ name: "ui_fixture_session", value: "1", url: baseURL! }]);
@@ -9,16 +15,25 @@ test("business navigation survives transitions from preview to licenses and home
   const nav = page.getByRole("navigation", { name: "メインナビゲーション" });
   await nav.getByRole("link", { name: "OSSライセンス", exact: true }).click();
   await expect(page).toHaveURL(/\/licenses$/);
+  await expect(page.getByRole("heading", { name: "OSSライセンス", exact: true })).toBeVisible();
+  await openGroup(nav, "取引・記録");
+  await openGroup(nav, "案件");
   await expect(nav.getByRole("link", { name: "車両", exact: true })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "案件", exact: true })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "案件・記録", exact: true })).toBeVisible();
   await nav.getByRole("link", { name: "ホーム", exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("heading", { name: "ホーム", exact: true })).toBeVisible();
+  await openGroup(nav, "取引・記録");
+  await openGroup(nav, "案件");
   await expect(nav.getByRole("link", { name: "車両", exact: true })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "案件", exact: true })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "案件・記録", exact: true })).toBeVisible();
   await nav.getByRole("link", { name: "車両", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/vehicles$/);
+  await expect(page.getByRole("heading", { name: "車両", exact: true })).toBeVisible();
   await nav.getByRole("link", { name: "ホーム", exact: true }).click();
-  await expect(nav.getByRole("link", { name: "案件", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "ホーム", exact: true })).toBeVisible();
+  await openGroup(nav, "案件");
+  await expect(nav.getByRole("link", { name: "案件・記録", exact: true })).toBeVisible();
 });
 
 test("a session established after an anonymous page is reflected on licenses", async ({ page, context, baseURL }) => {
@@ -27,6 +42,9 @@ test("a session established after an anonymous page is reflected on licenses", a
   await expect(nav.getByRole("link", { name: "車両", exact: true })).toHaveCount(0);
   await context.addCookies([{ name: "ui_fixture_session", value: "1", url: baseURL! }]);
   await nav.getByRole("link", { name: "OSSライセンス", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "OSSライセンス", exact: true })).toBeVisible();
+  await openGroup(nav, "取引・記録");
+  await openGroup(nav, "案件");
   await expect(nav.getByRole("link", { name: "車両", exact: true })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "案件", exact: true })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "案件・記録", exact: true })).toBeVisible();
 });

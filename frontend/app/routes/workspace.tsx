@@ -90,6 +90,7 @@ export default function Workspace({ loaderData }: Route.ComponentProps) {
         csrf: loaderData.csrf,
         email: loaderData.email,
         previewAvailable: loaderData.preview,
+        requestKey: loaderData.requestKey,
       }}
     >
       <WorkspaceView screen={loaderData.screen} />

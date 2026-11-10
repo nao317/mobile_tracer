@@ -24,6 +24,7 @@ services:
       PORT: "3000"
       API_INTERNAL_URL: http://backend:8080
       AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-}
+      GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
       # このローカルComposeでは、Docker内部のプライベートネットワークを信頼する。
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     healthcheck:

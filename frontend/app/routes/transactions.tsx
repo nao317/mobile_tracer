@@ -13,6 +13,8 @@ import {
   TextField,
 } from "../components/ui/primitives";
 import { Pagination } from "../components/molecules/pagination";
+import { settingsNavigation } from "../features/settings/navigation";
+import { useTranslation } from "../components/ui/display-settings";
 export const headers = sessionHeaders;
 export async function loader({ request }: Route.LoaderArgs) {
   const auth = await requireSession(request);
@@ -34,20 +36,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   );
 }
 export default function Transactions({ loaderData }: Route.ComponentProps) {
+  const t = useTranslation();
   return (
     <AuthenticatedLayout
       session={loaderData.session}
       title="取引・車両記録"
-      groups={[
-        {
-          id: "transactions",
-          label: "取引",
-          items: [
-            { id: "list", label: "取引一覧", to: "/transactions" },
-            { id: "account", label: "アカウント", to: "/account" },
-          ],
-        },
-      ]}
+      groups={settingsNavigation(t, loaderData.session)}
     >
       <div className={uiStyles["ui-stack"]}>
         <PageHeader

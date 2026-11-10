@@ -315,6 +315,11 @@ export function executePreview(
     )
       return fail("invalid_photo", "10MB以内のJPEG・PNG・WebP画像を選択してください。");
     const position = value(form, "position");
+    if (!exception && !value(form, "device_captured_at"))
+      return fail("invalid_photo", "撮影日時を入力してください。");
+    const latitude = Number(value(form, "latitude")), longitude = Number(value(form, "longitude"));
+    if (!exception && (!value(form, "location_label") || !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180))
+      return fail("invalid_photo", "撮影場所を検索または確認してください。");
     workflow.photos = workflow.photos.filter(
       (p) => p.versionId !== version.id || p.position !== position,
     );
@@ -331,6 +336,12 @@ export function executePreview(
           : "saved",
       note: value(form, "note"),
       receivedAt: now(),
+      capturedAt: value(form, "device_captured_at") || undefined,
+      capturedAtSource: value(form, "captured_at_source") || undefined,
+      locationLabel: value(form, "location_label") || undefined,
+      locationSource: value(form, "location_source") || undefined,
+      latitude: exception ? undefined : latitude,
+      longitude: exception ? undefined : longitude,
       src: value(form, "photoSource") || undefined,
     });
   } else if (intent === "answer" && version) {

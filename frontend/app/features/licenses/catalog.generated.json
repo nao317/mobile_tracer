@@ -2,7 +2,7 @@
   "inputs": {
     "frontend/package-lock.json": "57c59f610d16071f9df4e9375071d22fc940412740d691013a96fe7a718bdd73",
     "backend/go.mod": "519dd38322ab49857f32d7d52ea60d9aa3374589d1636834dd005299d7867c56",
-    "compose.yaml": "27e6f78aa821f85f7d6a78d71caaeab7375143e8710c2a365e0094127eb23956",
+    "compose.yaml": "c7b48b984ab70f8bb0fd916f11bdddfa7a013b87ccf68be79dc9f69108d3b617",
     "backend/Dockerfile": "1129b78b5b436f999e8b82104ba1580967b05438972f06bcba576e1d2df979a6",
     "frontend/Dockerfile": "947177ca317cbbc6773f23c84d7a7caf9ea1e89f2e20ef0a27d1e9467d0cab41",
     "frontend/app/root.tsx": "68341aae82e48e70308d89ab066953e0d8beb13194a8a1cdb6f972e807c7a865",

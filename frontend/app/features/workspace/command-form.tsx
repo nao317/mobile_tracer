@@ -65,11 +65,13 @@ export function CommandForm({
   hidden = {},
   children,
   guard = false,
+  multipart = false,
 }: {
   intent: string;
   hidden?: Record<string, string | number>;
   children: ReactNode;
   guard?: boolean;
+  multipart?: boolean;
 }) {
   const environment = useWorkspace();
   const errorId = useId();
@@ -169,6 +171,7 @@ export function CommandForm({
       ref={formRef}
       method="post"
       action="/app/actions"
+      encType={multipart ? "multipart/form-data" : undefined}
       onSubmit={() => {
         submitting.current = true;
         setDirty(false);

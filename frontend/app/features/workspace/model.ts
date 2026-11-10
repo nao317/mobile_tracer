@@ -123,6 +123,12 @@ export type Photo = {
   status: "saved" | "failed" | "exception";
   note: string;
   receivedAt: string;
+  capturedAt?: string;
+  capturedAtSource?: string;
+  locationLabel?: string;
+  locationSource?: string;
+  latitude?: number;
+  longitude?: number;
   src?: string;
 };
 export type Answer = {
