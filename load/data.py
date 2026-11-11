@@ -21,7 +21,8 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
+from PIL.TiffImagePlugin import IFDRational
 
 STATE = Path("/state")
 CERTS = Path("/test-certs")
@@ -54,12 +55,14 @@ def load_config(size):
               "admins_per_company": (1, 20), "managers_per_store": (1, 20), "staff_per_store": (1, 20),
               "events_per_case": (0, 30), "records_per_case": (1, 20), "versions_per_record": (1, 10),
               "customer_event_percent": (0, 100), "photo_percent": (0, 100), "hot_percent": (0, 100),
-              "photos_per_version": (1, 6), "photo_bytes": (1024, 10 << 20), "reserved": (0, cfg["cases"] - 1)}
+              "photos_per_version": (1, 20), "photo_bytes": (1024, 10 << 20), "reserved": (0, cfg["cases"] - 1)}
     for key, (low, high) in limits.items():
         if type(cfg[key]) is not int or not low <= cfg[key] <= high:
             raise ValueError(f"{key}: expected integer in [{low}, {high}]")
     if min(cfg["vehicles"], cfg["cases"]) < cfg["companies"] or cfg["photo_format"] not in {"jpeg", "png", "webp"}:
         raise ValueError("ensure every company has a vehicle and use jpeg, png or webp")
+    if cfg.get("image_mode") not in {"metadata", "real"}:
+        raise ValueError("image_mode must be metadata or real")
     for key, names in (("business_percent", KINDS), ("start_percent", STATUSES)):
         weights = cfg[key]
         if set(weights) != set(names) or any(type(n) is not int or n < 0 for n in weights.values()) or sum(weights.values()) != 100:
@@ -147,6 +150,7 @@ def estimate(cfg, fixture):
     event_count = len(fixture["events"])
     completions = sum(event["kind"] != "progress_report" for event in fixture["events"])
     photo_records = sum(record["photos"] for record in fixture["records"])
+    photo_cases = len({record["case"] for record in fixture["records"] if record["photos"]})
     presented = photo_records * cfg["versions_per_record"]
     versions = len(fixture["records"]) - photo_records + presented
     photos = presented * cfg["photos_per_version"]
@@ -164,15 +168,67 @@ def estimate(cfg, fixture):
               "load_fixture.dataset": 1,
               "audit.events": starts + responses + 2 * event_count + 3 * completions + presented + photo_records}
     other = sum(tables.values()) * 1536
-    image_bytes = photos * cfg["photo_bytes"]
-    with_indexes = (other + image_bytes) * 3 // 2
+    logical_image_bytes = photos * cfg["photo_bytes"]
+    stored_photo_bytes = cfg["photo_bytes"] if cfg["image_mode"] == "real" else 16384
+    stored_image_bytes = photos * stored_photo_bytes
+    with_indexes = (other + stored_image_bytes) * 3 // 2
     return dict(tables=tables, states=dict(states), firebase_users=tables["auth.users"], photos=photos,
-                photo_bytes=image_bytes, other_db_bytes=other, db_with_indexes_bytes=with_indexes,
+                cases=cfg["cases"], photo_cases=photo_cases,
+                photos_per_photo_case=photos / photo_cases if photo_cases else 0,
+                photos_per_all_case=photos / cfg["cases"], image_mode=cfg["image_mode"],
+                photo_bytes=logical_image_bytes, stored_photo_bytes=stored_image_bytes,
+                bytes_per_photo=cfg["photo_bytes"], stored_bytes_per_photo=stored_photo_bytes,
+                other_db_bytes=other, db_with_indexes_bytes=with_indexes,
                 db_wal_temp_bytes=with_indexes * 3, recommended_free_bytes=(2 << 30) + with_indexes * 4,
-                assumptions="1.5 KiB/row, 50% index/TOAST overhead, 3x for WAL/temp, 2 GiB for images/build cache baseline. DB estimates vary.")
+                assumptions="1.5 KiB/row, 50% index/TOAST overhead, 3x for WAL/temp, 2 GiB build-cache baseline. metadata mode stores 16 KiB decodable proxies and does not measure image I/O.")
 
 
 def image(fmt, size, seed):
+    if fmt == "jpeg":
+        width, height = ((4032, 3024) if size >= 500000 else (640, 480))
+        base = Image.new("RGB", (1008, 756))
+        draw = ImageDraw.Draw(base)
+        rng = random.Random(seed)
+        for y in range(756):
+            draw.line((0, y, 1008, y), fill=(55 + y * 80 // 756, 90 + y * 70 // 756, 120 + y * 60 // 756))
+        draw.rectangle((90, 330, 920, 650), fill=(39, 48, 57), outline=(210, 218, 224), width=5)
+        draw.polygon(((170, 420), (300, 300), (750, 300), (860, 430)), fill=(88, 112, 132))
+        for x in (205, 790):
+            draw.ellipse((x - 80, 565, x + 80, 725), fill=(20, 22, 25), outline=(150, 155, 160), width=8)
+        for _ in range(1800):
+            x, y = rng.randrange(1008), rng.randrange(756)
+            color = rng.randrange(35, 220)
+            draw.point((x, y), fill=(color, min(255, color + 12), max(0, color - 8)))
+        base = base.resize((width, height), Image.Resampling.BICUBIC)
+        exif = Image.Exif()
+        exif[306] = exif[36867] = exif[36868] = "2026:01:01 08:00:00"
+        exif[34853] = {1: "N", 2: (IFDRational(35), IFDRational(0), IFDRational(0)),
+                       3: "E", 4: (IFDRational(139), IFDRational(0), IFDRational(0))}
+        raw = None
+        for quality in range(92, 59, -4):
+            output = io.BytesIO()
+            base.save(output, "JPEG", quality=quality, subsampling=2, optimize=True, exif=exif)
+            if output.tell() <= size - 4:
+                raw = output.getvalue()
+                break
+        if raw is None:
+            raise ValueError("JPEG size is too small for the selected dimensions and EXIF")
+        gap = size - len(raw)
+        segments = (gap + 65536) // 65537
+        if gap < segments * 4:
+            raise ValueError("JPEG padding is too small")
+        rng = random.Random(seed)
+        payload_total = gap - segments * 4
+        block = bytearray(raw[:2])
+        for index in range(segments):
+            payload = payload_total // segments + (index < payload_total % segments)
+            block.extend(b"\xff\xfe" + struct.pack(">H", payload + 2) + rng.randbytes(payload))
+        raw = bytes(block) + raw[2:]
+        with Image.open(io.BytesIO(raw)) as decoded:
+            decoded.load()
+            if decoded.size != (width, height) or decoded.getexif().get(36867) is None:
+                raise ValueError("JPEG dimensions or EXIF were not preserved")
+        return raw
     output = io.BytesIO()
     Image.new("RGB", (24, 24), (71, 93, 118)).save(output, fmt.upper())
     raw = output.getvalue()
@@ -180,14 +236,7 @@ def image(fmt, size, seed):
     if gap < 16:
         raise ValueError("image size too small")
     rng = random.Random(seed)
-    if fmt == "jpeg":
-        segments = (gap + 65536) // 65537
-        block = bytearray(raw[:2])
-        for index in range(segments):
-            payload = gap // segments + (index < gap % segments) - 4
-            block.extend(b"\xff\xfe" + struct.pack(">H", payload + 2) + rng.randbytes(payload))
-        raw = bytes(block) + raw[2:]
-    elif fmt == "png":
+    if fmt == "png":
         chunk = b"raNd" + rng.randbytes(gap - 12)
         raw = raw[:-12] + struct.pack(">I", gap - 12) + chunk + struct.pack(">I", zlib.crc32(chunk)) + raw[-12:]
     else:
@@ -203,8 +252,8 @@ def query(sql, *, script=None, variables=None):
     args = ["psql", "-XqAt", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=terse"]
     for key, val in (variables or {}).items():
         args += ["-v", f"{key}={val}"]
-    args += ["-f", str(script)] if script else ["-c", sql]
-    done = subprocess.run(args, capture_output=True, text=True)
+    args += ["-f", str(script)] if script else []
+    done = subprocess.run(args, input=None if script else sql, capture_output=True, text=True)
     if done.returncode:
         # PostgreSQL DETAIL can include row values. Only show the terse error and file line.
         raise ValueError(done.stderr.strip().splitlines()[0] if done.stderr else "psql failed")
@@ -247,10 +296,16 @@ def write_json(path, data):
     tmp.replace(path)
 
 
+def write_upload_images(size, seed):
+    for index in range(20):
+        (STATE / f"upload-{index + 1:02}.jpeg").write_bytes(image("jpeg", size, seed + index))
+
+
 def seed(cfg, fixture):
     seed_sql = Path("/work/seed.sql").read_text()
     sql_digest = sha(seed_sql.encode())
-    digest = sha(stable({"config": cfg, "sql_sha256": sql_digest}).encode())
+    generator_digest = sha(Path("/work/data.py").read_bytes())
+    digest = sha(stable({"config": cfg, "sql_sha256": sql_digest, "generator_sha256": generator_digest}).encode())
     table = query("SELECT to_regclass('load_fixture.dataset')")
     previous = query("SELECT digest FROM load_fixture.dataset") if table else ""
     if previous and previous != digest:
@@ -261,7 +316,8 @@ def seed(cfg, fixture):
     ref = datetime.fromisoformat(cfg["reference_time"])
     if not ref + timedelta(hours=1) <= now < ref + timedelta(days=365):
         raise ValueError("reference_time must be at least one hour and less than 365 days before seeding")
-    photo = image(cfg["photo_format"], cfg["photo_bytes"], cfg["seed"])
+    stored_bytes = cfg["photo_bytes"] if cfg["image_mode"] == "real" else 16384
+    photo = image(cfg["photo_format"], stored_bytes, cfg["seed"])
     start = time.monotonic()
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
         for _ in executor.map(firebase_user, fixture["customers"] + fixture["staff"]):
@@ -278,13 +334,15 @@ def seed(cfg, fixture):
             sql.write_text(seed_sql.replace("@FIXTURE_FILE@", str(file)))
             query(None, script=sql)
     usable = [case for case in fixture["cases"] if case["state"] != "reserved"]
-    dataset = {"id": cfg["dataset"], "seed": cfg["seed"], "digest": digest, "sql_sha256": sql_digest, "cases": cfg["cases"],
+    dataset = {"id": cfg["dataset"], "seed": cfg["seed"], "digest": digest, "sql_sha256": sql_digest,
+               "generator_sha256": generator_digest, "image_mode": cfg["image_mode"],
+               "photo_format": cfg["photo_format"], "cases": cfg["cases"],
                "customers": cfg["customers"], "hot_percent": cfg["hot_percent"], "estimate": estimate(cfg, fixture)}
     write_json(STATE / "dataset.json", dataset)
     write_json(STATE / "fixture-targets.json", {"read": usable, "write": fixture["cases"][:cfg["reserved"]],
-                                       "photo_mime": "image/" + cfg["photo_format"], "photo_bytes": cfg["photo_bytes"],
-                                       "photo_sha256": sha(photo), "hot_percent": cfg["hot_percent"]})
-    (STATE / "upload.png").write_bytes(image("png", cfg["photo_bytes"], cfg["seed"]))
+                                       "photo_mime": "image/" + cfg["photo_format"], "photo_bytes": stored_bytes,
+                                       "photo_base_sha256": sha(photo), "hot_percent": cfg["hot_percent"]})
+    write_upload_images(cfg["photo_bytes"], cfg["seed"] + 1)
     print(stable(dict(dataset=dataset, reused=bool(previous), firebase_seconds=auth_seconds,
                       postgres_seconds=time.monotonic() - start)))
 
@@ -298,12 +356,35 @@ def mock(path):
 
 def prepare(scenario):
     targets = json.loads((STATE / "fixture-targets.json").read_text())
+    media_ids = [str(uuid.UUID(case["sample_media"])) for case in targets["read"] if case.get("sample_media")]
+    if media_ids:
+        rows = query(f"""
+          BEGIN;
+          CREATE TEMP TABLE requested_media(id uuid PRIMARY KEY) ON COMMIT DROP;
+          COPY requested_media(id) FROM STDIN;
+{chr(10).join(media_ids)}
+\\.
+          SELECT m.id||'|'||m.sha256 FROM app.workflow_media m JOIN requested_media r ON r.id=m.id;
+          COMMIT;
+        """).splitlines()
+        hashes = dict(row.split("|", 1) for row in rows)
+        for case in targets["read"]:
+            if case.get("sample_media"):
+                case["sample_media_sha256"] = hashes.get(case["sample_media"])
     reserved = {case["id"] for case in targets["write"]}
     if reserved:
-        ids = ",".join(f"'{uuid.UUID(ident)}'" for ident in sorted(reserved))
+        ids = [str(uuid.UUID(ident)) for ident in sorted(reserved)]
+        copy_rows = "\n".join(ids)
         available = set(query(f"""
-          SELECT id FROM app.cases c WHERE id IN ({ids}) AND status='awaiting_customer'
-          AND NOT EXISTS(SELECT FROM app.case_start_requests WHERE case_id=c.id)
+          BEGIN;
+          CREATE TEMP TABLE requested_cases(id uuid PRIMARY KEY) ON COMMIT DROP;
+          COPY requested_cases(id) FROM STDIN;
+{copy_rows}
+\\.
+          SELECT c.id FROM app.cases c JOIN requested_cases r ON r.id=c.id
+          WHERE c.status='awaiting_customer'
+          AND NOT EXISTS(SELECT FROM app.case_start_requests WHERE case_id=c.id);
+          COMMIT;
         """).splitlines())
         targets["write"] = [case for case in targets["write"] if case["id"] in available]
     if scenario in ("write", "images", "registration", "conflict", "mixed") and not targets["write"]:
@@ -359,6 +440,41 @@ def stats():
     return result
 
 
+def explain_history():
+    user_id = str(uuid.UUID(query("""
+      SELECT actor_id FROM audit.events
+      WHERE actor_type='user' AND target_id IS NOT NULL ORDER BY created_at LIMIT 1
+    """)))
+    raw = query(f"""
+      EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, FORMAT JSON)
+      WITH scoped AS (
+        SELECT CASE WHEN target_type='record' THEN 'record_version' ELSE target_type END AS target_type,
+          CASE WHEN target_type='record' THEN details->>'version_id' ELSE target_id::text END AS target_id,
+          action,details,created_at,id,
+          EXISTS(SELECT 1 FROM auth.management_requests r WHERE r.id=e.target_id AND r.requester_id='{user_id}') AS own_application
+        FROM audit.events e
+        WHERE target_id IS NOT NULL AND result='succeeded'
+          AND target_type IN ('record','record_version','case','management_request')
+          AND (action LIKE 'transaction.%' OR action LIKE 'case.%' OR action LIKE 'record.%' OR
+               action LIKE 'draft.%' OR action LIKE 'management.request_%')
+          AND ((actor_type='user' AND actor_id='{user_id}') OR
+            (actor_type='staff' AND EXISTS(SELECT 1 FROM auth.staff_links l WHERE l.staff_id=e.actor_id
+              AND l.tenant_id=e.tenant_id AND l.user_id='{user_id}' AND l.revoked_at IS NULL)) OR
+            (target_type='management_request' AND EXISTS(SELECT 1 FROM auth.management_requests r
+              WHERE r.id=e.target_id AND r.requester_id='{user_id}')))
+      ), ranked AS (
+        SELECT *,row_number() OVER (PARTITION BY target_type,target_id ORDER BY created_at DESC,id DESC) AS position
+        FROM scoped WHERE target_id IS NOT NULL
+      )
+      SELECT * FROM ranked WHERE position=1 ORDER BY created_at DESC,target_type,target_id LIMIT 20;
+    """)
+    plan_data = json.loads(raw)
+    write_json(STATE / "history-explain.json", plan_data)
+    plan = plan_data[0]
+    print(stable({"file": "/state/history-explain.json", "planning_ms": plan.get("Planning Time"),
+                  "execution_ms": plan.get("Execution Time"), "root": plan.get("Plan", {}).get("Node Type")}))
+
+
 def verify():
     dataset = json.loads((STATE / "dataset.json").read_text())
     tables = dataset["estimate"]["tables"]
@@ -381,7 +497,14 @@ def verify():
        (SELECT count(*) FROM integrity.api_registrations a LEFT JOIN app.workflow_anchors h ON h.version_id=a.subject_id
         WHERE a.subject_type='record' AND (h.version_id IS NULL OR a.manifest_hash<>h.manifest_hash)) +
        (SELECT count(*) FROM app.workflow_responses r JOIN app.workflow_requests q ON q.id=r.request_id
-        JOIN app.record_versions v ON v.id=q.version_id WHERE r.actor_id<>q.user_id OR r.created_at>q.deadline OR v.version_no<>1)
+        JOIN app.record_versions v ON v.id=q.version_id WHERE r.actor_id<>q.user_id OR r.created_at>q.deadline OR v.version_no<>1) +
+       (SELECT count(*) FROM app.record_versions v WHERE v.status='submitted' AND (
+        jsonb_typeof(v.vehicle_snapshot)<>'object' OR NOT (v.vehicle_snapshot ?& ARRAY['id','model_name','created_at','identifiers']) OR
+        jsonb_typeof(v.vehicle_snapshot->'identifiers')<>'array')) +
+       (SELECT count(*) FROM app.workflow_presentations p WHERE
+        jsonb_typeof(convert_from(p.content,'UTF8')::jsonb->'vehicle')<>'object' OR
+        jsonb_typeof(convert_from(p.content,'UTF8')::jsonb->'vehicle'->'identifiers')<>'array') +
+       (SELECT count(*)-count(DISTINCT sha256) FROM app.workflow_media)
     """)
     if invalid != "0":
         raise ValueError("Fixture relationship or hash invariant failed")
@@ -468,11 +591,14 @@ def registration(mode):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("estimate", "seed", "verify", "probe", "stats", "image", "registration", "prepare"))
+    parser.add_argument("command", choices=("estimate", "seed", "verify", "probe", "stats", "image", "registration", "prepare", "history-plan"))
     parser.add_argument("argument", nargs="?")
+    parser.add_argument("mode", nargs="?", choices=("metadata", "real"))
     args = parser.parse_args()
     if args.command in ("estimate", "seed"):
         cfg = load_config(args.argument)
+        if args.mode:
+            cfg["image_mode"] = args.mode
         fixture = plan(cfg)
         if args.command == "estimate":
             print(json.dumps(estimate(cfg, fixture), ensure_ascii=False, indent=2))
@@ -481,11 +607,13 @@ def main():
     elif args.command == "stats":
         print(stable(stats()))
     elif args.command == "image":
-        (STATE / "upload.png").write_bytes(image("png", int(args.argument), 76))
+        write_upload_images(int(args.argument), 77)
     elif args.command == "prepare":
         prepare(args.argument)
     elif args.command == "registration":
         registration(args.argument)
+    elif args.command == "history-plan":
+        explain_history()
     else:
         {"verify": verify, "probe": probe}[args.command]()
 

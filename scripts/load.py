@@ -226,6 +226,14 @@ def tools(*args, **kwargs):
     return compose("run", "--rm", "--no-deps", "tools", "python3", "/work/data.py", *args, **kwargs)
 
 
+def db_free_bytes():
+    result = compose("exec", "-T", "db", "df", "-Pk", "/var/lib/postgresql/data", capture=True)
+    fields = result.stdout.strip().splitlines()[-1].split()
+    if len(fields) < 4 or not fields[3].isdigit():
+        raise ValueError("DB ボリュームの空き容量を確認できません")
+    return int(fields[3]) * 1024
+
+
 def up(cfg, replicas=None):
     preflight(cfg)
     count = replicas or int(cfg["LOAD_API_REPLICAS"])
@@ -301,12 +309,19 @@ def trial(cfg, args, *, warmup=False):
                     dirty=bool(run(["git", "status", "--porcelain"], capture=True).stdout.strip()), dataset=dataset,
                     scenario=scenario, duration_seconds=duration, warmup_seconds=args.warmup,
                     vus=1 if args.once and not warmup else args.vus, arrival_rate=args.rate or None,
+                    start_rate=args.start_rate or args.rate or None, max_vus=args.max_vus or args.vus,
+                    profile=args.profile, image_count=args.image_count,
+                    cache_condition=args.cache_condition,
                     single_iteration=args.once and not warmup, read_percent=args.read_percent,
-                    image_bytes=args.image_bytes, api_instances=replicas, mock=cfg["LOAD_MOCK_MODE"],
+                    image_bytes=args.image_bytes, api_instances=replicas,
+                    api_cpus=float(cfg["LOAD_API_CPUS"]), api_memory_mib=int(cfg["LOAD_API_MEMORY_MIB"]),
+                    db_connections=int(cfg["LOAD_DB_CONNECTIONS"]), mock=cfg["LOAD_MOCK_MODE"],
                     mock_delay_ms=int(cfg["LOAD_MOCK_DELAY_MS"]), mock_confirm_seconds=int(cfg["LOAD_CONFIRM_SECONDS"]),
                     host={"cpus": os.cpu_count(), "memory_bytes": os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES"),
                           "free_workspace_bytes": shutil.disk_usage(ROOT).free})
     env = {"SCENARIO": scenario, "VUS": args.vus, "SECONDS": duration, "RATE": args.rate,
+           "START_RATE": args.start_rate or args.rate, "MAX_VUS": args.max_vus or args.vus,
+           "PROFILE": args.profile, "IMAGE_COUNT": args.image_count,
            "READ_PERCENT": args.read_percent, "RESULT": ident, "ONCE": int(args.once and not warmup)}
     extra = [value for key, val in env.items() for value in ("-e", f"{key}={val}")]
     if args.image_bytes and scenario in {"images", "mixed"}:
@@ -349,7 +364,9 @@ def failover(cfg):
     run(DOCKER + ["stop", removed])
     try:
         time.sleep(3)
-        args = argparse.Namespace(scenario="read", duration=5, warmup=0, vus=2, rate=2,
+        args = argparse.Namespace(scenario="read", duration=5, warmup=0, vus=2, rate=2, start_rate=2,
+                                  max_vus=8, profile="load", image_count=10,
+                                  cache_condition="unchanged",
                                   read_percent=70, image_bytes=0, once=False)
         result = trial(cfg, args)
         if result["api_instances"] != 1 or len(result["upstream_requests"]) != 1:
@@ -361,32 +378,50 @@ def failover(cfg):
 def report():
     import csv
     writer = csv.writer(sys.stdout)
-    writer.writerow(["run", "scenario", "api", "vus", "rate", "exit", "starts_per_second", "dropped_iterations",
-                     "p50_ms", "p95_ms", "p99_ms", "http_failed", "business_failed"])
+    writer.writerow(["run", "scenario", "operation", "api", "vus", "max_vus", "rate", "exit",
+                     "requests", "rps", "success_rate", "failure_rate", "scheduled", "started", "completed", "iterations",
+                     "dropped_iterations", "p50_ms", "p90_ms", "p95_ms", "p99_ms", "max_ms", "business_failed"])
     for path in sorted(RESULTS.glob("*/report.json")):
         meta = json.loads(path.read_text())
         result = path.with_name("k6.json")
         metrics = json.loads(result.read_text())["metrics"] if result.exists() else {}
-        latency = metrics.get("http_req_duration{phase:business}", {}).get("values", {})
         starts = metrics.get("iteration_started", {}).get("values", {}).get("count")
-        measured = bool(latency.get("count"))
-        writer.writerow([meta["id"], meta["scenario"], meta["api_instances"], meta["vus"], meta["arrival_rate"],
-                         meta["k6_exit_code"], starts / meta["duration_seconds"] if starts is not None else None,
-                         metrics.get("dropped_iterations", {}).get("values", {}).get("count"),
-                         latency.get("med") if measured else None, latency.get("p(95)") if measured else None,
-                         latency.get("p(99)") if measured else None,
-                         metrics.get("http_req_failed{phase:business}", {}).get("values", {}).get("rate") if measured else None,
-                         metrics.get("business_failed", {}).get("values", {}).get("rate") if measured else None])
+        completed = metrics.get("iteration_completed", {}).get("values", {}).get("count")
+        iterations = metrics.get("iterations", {}).get("values", {}).get("count")
+        dropped = metrics.get("dropped_iterations", {}).get("values", {}).get("count")
+        scheduled = (starts or 0) + (dropped or 0) if meta.get("arrival_rate") else None
+        names = [("all", "http_req_duration{phase:business}", "http_req_failed{phase:business}")]
+        for key in sorted(metrics):
+            match = re.fullmatch(r"http_req_duration\{phase:business,operation:([^}]+)\}", key)
+            if match:
+                names.append((match.group(1), key, f"http_req_failed{{phase:business,operation:{match.group(1)}}}"))
+        for operation, latency_key, failed_key in names:
+            latency = metrics.get(latency_key, {}).get("values", {})
+            failed = metrics.get(failed_key, {}).get("values", {}).get("rate")
+            count = latency.get("count")
+            measured = bool(count)
+            business_key = "business_failed" if operation == "all" else f"business_failed{{operation:{operation}}}"
+            writer.writerow([meta["id"], meta["scenario"], operation, meta["api_instances"], meta["vus"],
+                             meta.get("max_vus"), meta["arrival_rate"], meta["k6_exit_code"], count,
+                             count / meta["duration_seconds"] if measured else None,
+                             1 - failed if failed is not None else None, failed, scheduled,
+                             starts, completed, iterations, dropped,
+                             latency.get("med") if measured else None, latency.get("p(90)") if measured else None,
+                             latency.get("p(95)") if measured else None, latency.get("p(99)") if measured else None,
+                             latency.get("max") if measured else None,
+                             metrics.get(business_key, {}).get("values", {}).get("rate") if measured else None])
 
 
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "check", "up", "down", "verify", "smoke", "stats", "tests", "report",
+    for name in ("init", "check", "up", "down", "verify", "smoke", "stats", "history-plan", "tests", "report",
                  "clean", "reset", "registration", "failover"):
         sub.add_parser(name)
     for name in ("estimate", "seed"):
-        sub.add_parser(name).add_argument("size", choices=("small", "medium", "large", "probe"))
+        item = sub.add_parser(name)
+        item.add_argument("size", choices=("small", "medium", "large", "probe"))
+        item.add_argument("--image-mode", choices=("metadata", "real"))
     for name in ("run", "compare"):
         cmd = sub.add_parser(name)
         if name == "run":
@@ -398,8 +433,13 @@ def main():
         cmd.add_argument("--warmup", type=int, default=0)
         cmd.add_argument("--vus", type=int, default=2)
         cmd.add_argument("--rate", type=int, default=0)
+        cmd.add_argument("--start-rate", type=int, default=0)
+        cmd.add_argument("--max-vus", type=int, default=0)
+        cmd.add_argument("--profile", choices=("baseline", "load", "stress", "spike", "soak"), default="load")
+        cmd.add_argument("--cache-condition", choices=("cold", "warm", "unchanged"), default="unchanged")
         cmd.add_argument("--read-percent", type=int, default=70)
         cmd.add_argument("--image-bytes", type=int, default=0)
+        cmd.add_argument("--image-count", type=int, default=10)
     args = parser.parse_args()
     cmd = args.command
     if cmd == "init":
@@ -434,10 +474,15 @@ def main():
     elif cmd == "estimate":
         preflight(cfg)
         compose("build", "tools", capture=True)
-        tools("estimate", args.size)
+        tools("estimate", args.size, *([args.image_mode] if args.image_mode else []))
     elif cmd == "seed":
-        tools("seed", args.size)
-    elif cmd in ("verify", "stats"):
+        mode = [args.image_mode] if args.image_mode else []
+        planned = json.loads(tools("estimate", args.size, *mode, capture=True).stdout)
+        free = db_free_bytes()
+        if free < planned["recommended_free_bytes"]:
+            raise ValueError(f"DB ボリュームの空き容量が不足しています。必要 {planned['recommended_free_bytes']} bytes、空き {free} bytes")
+        tools("seed", args.size, *mode)
+    elif cmd in ("verify", "stats", "history-plan"):
         tools(cmd)
     elif cmd == "registration":
         tools(cmd, cfg["LOAD_MOCK_MODE"])
@@ -452,14 +497,19 @@ def main():
     else:
         if cmd == "smoke":
             tools("probe")
-            args = argparse.Namespace(scenario="read", duration=5, warmup=0, vus=2, rate=2,
+            args = argparse.Namespace(scenario="read", duration=5, warmup=0, vus=2, rate=2, start_rate=2,
+                                      max_vus=8, profile="load", image_count=10,
+                                      cache_condition="unchanged",
                                       read_percent=70, image_bytes=0, once=False)
         if args.scenario == "conflict":
             args.once = True
         if args.once and args.rate:
             raise ValueError("--once と --rate は同時に指定できません")
-        if not (1 <= args.duration <= 86400 and 0 <= args.warmup <= 3600 and 1 <= args.vus <= 1000
-                and 0 <= args.rate <= 100000 and 0 <= args.read_percent <= 100 and 0 <= args.image_bytes <= 10485760):
+        if not (1 <= args.duration <= 604800 and 0 <= args.warmup <= 3600 and 1 <= args.vus <= 10000
+                and 0 <= args.rate <= 100000 and 0 <= args.start_rate <= 100000
+                and 0 <= args.max_vus <= 100000 and (args.max_vus == 0 or args.max_vus >= args.vus)):
+            raise ValueError("試験条件が範囲外です")
+        if not (0 <= args.read_percent <= 100 and 0 <= args.image_bytes <= 10485760 and 1 <= args.image_count <= 20):
             raise ValueError("試験条件が範囲外です")
         for count in ((1, 2) if cmd == "compare" else (None,)):
             if count:

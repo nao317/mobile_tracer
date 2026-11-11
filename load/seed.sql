@@ -44,6 +44,19 @@ $$;
 CREATE FUNCTION pg_temp.bytes(value jsonb) RETURNS bytea LANGUAGE sql IMMUTABLE STRICT AS $$
 SELECT convert_to(pg_temp.canonical(value),'UTF8')
 $$;
+CREATE FUNCTION pg_temp.photo(value bytea, media_id uuid, mime text) RETURNS bytea
+LANGUAGE plpgsql IMMUTABLE STRICT AS $$
+DECLARE result bytea := value; digest bytea := sha256(convert_to(media_id::text,'UTF8')); i integer;
+BEGIN
+  -- JPEG COM/ancillary payload starts before this offset. Changing it keeps the
+  -- image decodable while preventing every media row from sharing one value.
+  FOR i IN 0..15 LOOP
+    IF mime='image/jpeg' THEN
+      result := set_byte(result,32+i,get_byte(result,32+i) # get_byte(digest,i));
+    END IF;
+  END LOOP;
+  RETURN result;
+END $$;
 
 CREATE TEMP TABLE fixture_companies ON COMMIT DROP AS
 SELECT c.* FROM source, jsonb_to_recordset(payload->'companies') c(id uuid, config uuid, name text, admin uuid);
@@ -181,29 +194,37 @@ BEGIN
    FROM app.record_versions v JOIN fixture_cases c ON c.id=v.case_id WHERE v.version_no=version;
    INSERT INTO app.workflow_media(id,tenant_id,case_id,record_version_id,request_key,position,mime_type,bytes,sha256,actor_id,
       device_captured_at,latitude,longitude,location_label,captured_at_source,location_source,created_at)
-   SELECT pg_temp.fixture_id(v.id,'photo:'||n),v.tenant_id,v.case_id,v.id,pg_temp.fixture_id(v.id,'photo-key:'||n),
-     (ARRAY['正面','右前','右後','後面','左後','左前'])[n],mime,photo,encode(sha256(photo),'hex'),c.actor,
-     v.created_at,35.000000,139.000000,'Synthetic test location','device','device',v.created_at
+   SELECT media.id,v.tenant_id,v.case_id,v.id,pg_temp.fixture_id(v.id,'photo-key:'||n),
+     'position-'||lpad(n::text,2,'0'),mime,media.bytes,encode(sha256(media.bytes),'hex'),c.actor,
+     v.created_at,35.000000,139.000000,'Synthetic test location','metadata','metadata',v.created_at
    FROM app.record_versions v JOIN fixture_records r ON r.id=v.record_id AND r.photos
    JOIN fixture_cases c ON c.id=v.case_id CROSS JOIN settings CROSS JOIN generate_series(1,per_version) n
+   CROSS JOIN LATERAL (SELECT pg_temp.fixture_id(v.id,'photo:'||n) AS id) media_id
+   CROSS JOIN LATERAL (SELECT media_id.id,pg_temp.photo(photo,media_id.id,mime) AS bytes) media
    WHERE v.version_no=version;
    WITH content AS (
      SELECT v.id,c.actor,v.created_at,pg_temp.bytes(jsonb_build_object(
        'schema','mobile-tracer/record/v1','version',to_jsonb(v)||jsonb_build_object('status','submitted',
          'entries',jsonb_build_object('odometer',c.ordinal*10+version)),
-       'case',to_jsonb(item),'vehicle',to_jsonb(vehicle),'presented_by',c.actor,'presented_at',pg_temp.iso(v.created_at),
+       'case',to_jsonb(item),'vehicle',jsonb_build_object(
+         'id',veh.id,'model_name',veh.model_name,'created_at',pg_temp.iso(veh.created_at),
+         'identifiers','[]'::jsonb
+       ),'presented_by',c.actor,'presented_at',pg_temp.iso(v.created_at),
        'media',(SELECT jsonb_agg(to_jsonb(m)-'bytes'-'request_key' ORDER BY m.position,m.id)
                 FROM app.workflow_media m WHERE m.record_version_id=v.id))) AS raw
      FROM app.record_versions v JOIN fixture_records r ON r.id=v.record_id AND r.photos
      JOIN fixture_cases c ON c.id=v.case_id JOIN app.cases item ON item.id=c.id
-     JOIN app.vehicles vehicle ON vehicle.id=c.vehicle WHERE v.version_no=version
+     JOIN app.vehicles veh ON veh.id=c.vehicle WHERE v.version_no=version
    )
    INSERT INTO app.workflow_presentations(version_id,content,content_hash,actor_id,created_at)
    SELECT id,raw,encode(sha256(raw),'hex'),actor,created_at FROM content;
-   UPDATE app.record_versions v SET status='submitted',vehicle_snapshot=to_jsonb(vehicle),hash_algorithm='sha256',
+   UPDATE app.record_versions v SET status='submitted',vehicle_snapshot=jsonb_build_object(
+        'id',veh.id,'model_name',veh.model_name,'created_at',pg_temp.iso(veh.created_at),
+        'identifiers','[]'::jsonb
+      ),hash_algorithm='sha256',
       content_hash=(SELECT p.content_hash FROM app.workflow_presentations p WHERE p.version_id=v.id),
       submit_idempotency_key=pg_temp.fixture_id(v.id,'submit'),submitted_by=v.created_by,submitted_at=v.created_at+interval '1 minute'
-   FROM fixture_cases c JOIN app.vehicles vehicle ON vehicle.id=c.vehicle
+   FROM fixture_cases c JOIN app.vehicles veh ON veh.id=c.vehicle
    WHERE v.case_id=c.id AND v.version_no=version AND EXISTS(SELECT FROM app.workflow_presentations p WHERE p.version_id=v.id);
    INSERT INTO app.workflow_requests(id,version_id,user_id,qualification,kind,statement,deadline,created_at)
    SELECT pg_temp.fixture_id(v.id,'confirmation'),v.id,c.customer,
