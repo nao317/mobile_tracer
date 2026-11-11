@@ -1,14 +1,19 @@
 import http from 'k6/http';
 import exec from 'k6/execution';
 import crypto from 'k6/crypto';
-import { Counter, Rate } from 'k6/metrics';
+import { Counter, Rate, Trend } from 'k6/metrics';
 import { sleep } from 'k6';
 
 const targets = JSON.parse(open('/state/targets.json'));
-const image = open('/state/upload.png', 'b');
+const uploadImages = Array.from({ length: 20 }, (_, index) =>
+  open(`/state/upload-${String(index + 1).padStart(2, '0')}.jpeg`, 'b'));
 const scenario = __ENV.SCENARIO;
 const vus = Number(__ENV.VUS);
 const rate = Number(__ENV.RATE);
+const startRate = Number(__ENV.START_RATE || rate);
+const maxVUs = Number(__ENV.MAX_VUS || vus);
+const profile = __ENV.PROFILE || 'load';
+const imageCount = Number(__ENV.IMAGE_COUNT || 10);
 const seconds = Number(__ENV.SECONDS);
 const once = __ENV.ONCE === '1' || scenario === 'conflict';
 const base = 'http://nginx:8080';
@@ -18,12 +23,16 @@ const firebase = 'http://firebase-auth:9099/identitytoolkit.googleapis.com/v1/ac
 const failed = new Rate('business_failed');
 const iterationFailed = new Rate('iteration_failed');
 const iterationStarted = new Counter('iteration_started');
+const iterationCompleted = new Counter('iteration_completed');
+const uploadRate = new Trend('image_upload_bytes_per_second');
+const downloadRate = new Trend('image_download_bytes_per_second');
 const status = new Counter('operation_status');
 const timedOut = new Counter('operation_timeout');
 const conflicts = new Counter('expected_conflicts');
 const writes = ['write', 'images', 'mixed', 'registration', 'conflict'].includes(scenario);
 const readShare = scenario === 'mixed' ? Number(__ENV.READ_PERCENT) / 100 : 0;
-const maxIterations = once ? 1 : rate ? rate * seconds + 1 : vus * seconds * 2;
+const profileFactor = profile === 'spike' ? 5 : profile === 'stress' ? 3 : 1;
+const maxIterations = once ? 1 : rate ? rate * seconds * profileFactor + 1 : vus * seconds * 2;
 const writeLimit = Math.min(targets.write.length, maxIterations - Math.floor(maxIterations * readShare));
 const readSlots = targets.read.slice(0, Math.max(4, vus * 2));
 const mediaSlots = targets.read.filter(row => row.sample_media).slice(0, Math.max(4, vus * 2));
@@ -52,14 +61,30 @@ for (const op of operationNames) {
   }
 }
 
+function mainScenario() {
+  if (once) return one;
+  if (!rate) return { executor: 'constant-vus', vus, duration: `${seconds}s`, gracefulStop: '15s' };
+  if (profile === 'stress') return {
+    executor: 'ramping-arrival-rate', startRate, timeUnit: '1s', preAllocatedVUs: vus, maxVUs,
+    stages: [{ target: rate, duration: `${Math.max(1, Math.floor(seconds / 3))}s` },
+      { target: rate * 2, duration: `${Math.max(1, Math.floor(seconds / 3))}s` },
+      { target: rate * 3, duration: `${Math.max(1, seconds - 2 * Math.floor(seconds / 3))}s` }], gracefulStop: '15s',
+  };
+  if (profile === 'spike') return {
+    executor: 'ramping-arrival-rate', startRate, timeUnit: '1s', preAllocatedVUs: vus, maxVUs,
+    stages: [{ target: rate, duration: `${Math.max(1, Math.floor(seconds / 4))}s` },
+      { target: rate * 5, duration: `${Math.max(1, Math.floor(seconds / 4))}s` },
+      { target: rate, duration: `${Math.max(1, seconds - 2 * Math.floor(seconds / 4))}s` }], gracefulStop: '15s',
+  };
+  return { executor: 'constant-arrival-rate', rate, timeUnit: '1s', duration: `${seconds}s`,
+    preAllocatedVUs: vus, maxVUs, gracefulStop: '15s' };
+}
+
 export const options = {
   setupTimeout: '15m',
-  scenarios: { main: once ? one : rate ? {
-    executor: 'constant-arrival-rate', rate, timeUnit: '1s', duration: `${seconds}s`,
-    preAllocatedVUs: vus, maxVUs: vus, gracefulStop: '15s',
-  } : { executor: 'constant-vus', vus, duration: `${seconds}s`, gracefulStop: '15s' } },
+  scenarios: { main: mainScenario() },
   systemTags: ['status', 'method', 'name', 'scenario', 'expected_response', 'error_code'],
-  summaryTrendStats: ['min', 'med', 'avg', 'p(95)', 'p(99)', 'max', 'count'],
+  summaryTrendStats: ['min', 'med', 'avg', 'p(90)', 'p(95)', 'p(99)', 'max', 'count'],
   thresholds: {
     ...operationMetrics,
     iteration_started: ['count>0'],
@@ -153,9 +178,11 @@ function params(user, op, expected, binary = false, multipart = false) {
   };
 }
 
-function api(user, op, method, path, body, expected, check, { binary = false, multipart = false } = {}) {
+function api(user, op, method, path, body, expected, check, opts = {}) {
+  const { binary = false, multipart = false, observe = null } = opts;
   const response = http.request(method, base + path, multipart ? body : body === null ? null : JSON.stringify(body),
     params(user, op, expected, binary, multipart));
+  if (observe) observe(response);
   const data = binary ? response.body : safeJSON(response)?.data;
   record(op, response, expected.includes(response.status) && check(data, response), expected);
   return data;
@@ -191,7 +218,8 @@ function read(sessions, i) {
   get(business, 'scoped_search', '/api/casework?q=Load', rows =>
     Array.isArray(rows) && rows.every(item => item.configuration_version_id === row.config && item.store_id === row.store));
   if (row.sample_media) get(customer, 'transaction_detail', '/api/transactions/' + row.sample_version,
-    data => data?.content?.version?.id === row.sample_version);
+    data => data?.content?.version?.id === row.sample_version && data?.content?.vehicle?.id === row.vehicle &&
+      Array.isArray(data?.content?.vehicle?.identifiers));
 }
 
 function mediaRead(sessions, i) {
@@ -200,8 +228,10 @@ function mediaRead(sessions, i) {
   api(sessions[row.customer_email], 'photo_read', 'GET',
     `/api/transactions/${row.sample_version}/media/${row.sample_media}`, null, [200],
     (body, response) => body?.byteLength === targets.photo_bytes &&
-      response.headers['Content-Type'] === targets.photo_mime && crypto.sha256(body, 'hex') === targets.photo_sha256,
-    { binary: true });
+      response.headers['Content-Type'] === targets.photo_mime && crypto.sha256(body, 'hex') === row.sample_media_sha256,
+    { binary: true, observe: response => {
+      if (response.timings.duration > 0) downloadRate.add(response.body.byteLength * 1000 / response.timings.duration);
+    } });
 }
 
 function start(row, staff, customer, validate = false, others = null) {
@@ -267,25 +297,44 @@ function event(row, maker, approver, staff, customer, kind, conflict = false) {
 }
 
 function upload(row, staff, customer) {
-  const draft = post(staff, 'draft_create', `/api/cases/${row.id}/records`,
-    { record_kind: 'inspection', entries: { odometer: 12000 } }, 201, data => !!data?.draft?.id).draft;
-  const path = '/api/transactions/' + draft.id;
-  const media = post(staff, 'photo_upload', path + '/media', {
-    photo: http.file(image, 'fixture.png', 'image/png'), request_key: key(), position: '正面',
-    device_captured_at: new Date().toISOString(), latitude: '35', longitude: '139',
-    location_label: 'Synthetic test location', captured_at_source: 'device', location_source: 'device',
-  }, 201, data => !!data?.id, { multipart: true });
-  api(staff, 'photo_uploaded_read', 'GET', path + '/media/' + media.id, null, [200],
-    body => body?.byteLength === image.byteLength && crypto.sha256(body, 'hex') === crypto.sha256(image, 'hex'),
-    { binary: true });
+  const positions = {
+    rental: ['正面', '右前', '右後', '後面', '左後', '左前'],
+    dealer: ['正面', '右前', '右側面', '右後', '後面', '左後', '左側面', '左前'],
+    repair: ['正面', '右前', '右後', '後面', '左後', '左前'],
+  }[row.kind];
   const qualification = { rental: 'renter', dealer: 'purchaser', repair: 'repair_requester' }[row.kind];
-  post(staff, 'record_present', path + '/present', { request_key: key(), lock_version: draft.lock_version,
-    recipients: [{ email: row.customer_email, qualification, kind: 'state_agreement', statement: 'Review the photo', deadline: deadline() }] },
-    200, data => !!data);
-  const presented = get(customer, 'presented_record', path, data =>
-    data?.content?.version?.id === draft.id && !!data.requests?.[0]?.id && !data.anchor);
-  post(customer, 'record_approve', path + '/respond',
-    { request_id: presented.requests[0].id, decision: 'approved' }, 200, data => data === 'answered');
+  let uploaded = 0;
+  while (uploaded < imageCount) {
+    const draft = post(staff, 'draft_create', `/api/cases/${row.id}/records`,
+      { record_kind: 'inspection', entries: { odometer: 12000 + uploaded } }, 201, data => !!data?.draft?.id).draft;
+    const path = '/api/transactions/' + draft.id;
+    const media = [];
+    const batchImages = [];
+    const batch = Math.min(positions.length, imageCount - uploaded);
+    for (let n = 0; n < batch; n++) {
+      const image = uploadImages[uploaded + n];
+      batchImages.push(image);
+      media.push(post(staff, 'photo_upload', path + '/media', {
+        photo: http.file(image, `fixture-${uploaded + n + 1}.jpg`, 'image/jpeg'), request_key: key(), position: positions[n],
+        device_captured_at: new Date().toISOString(), latitude: '35', longitude: '139',
+        location_label: 'Synthetic test location', captured_at_source: 'metadata', location_source: 'metadata',
+      }, 201, data => !!data?.id, { multipart: true, observe: response => {
+        if (response.timings.duration > 0) uploadRate.add(image.byteLength * 1000 / response.timings.duration);
+      } }));
+    }
+    api(staff, 'photo_uploaded_read', 'GET', path + '/media/' + media[0].id, null, [200],
+      body => body?.byteLength === batchImages[0].byteLength &&
+        crypto.sha256(body, 'hex') === crypto.sha256(batchImages[0], 'hex'),
+      { binary: true });
+    post(staff, 'record_present', path + '/present', { request_key: key(), lock_version: draft.lock_version,
+      recipients: [{ email: row.customer_email, qualification, kind: 'state_agreement', statement: 'Review the photo', deadline: deadline() }] },
+      200, data => !!data);
+    const presented = get(customer, 'presented_record', path, data =>
+      data?.content?.version?.id === draft.id && !!data.requests?.[0]?.id && !data.anchor);
+    post(customer, 'record_approve', path + '/respond',
+      { request_id: presented.requests[0].id, decision: 'approved' }, 200, data => data === 'answered');
+    uploaded += batch;
+  }
 }
 
 function mutate(sessions, i, mode) {
@@ -327,6 +376,7 @@ export default function (sessions) {
     if (scenario === 'login') failed.add(true, { operation: 'login' });
     console.error(String(error));
   }
+  iterationCompleted.add(1);
   if (!once && !rate && writes) sleep(0.5);
 }
 

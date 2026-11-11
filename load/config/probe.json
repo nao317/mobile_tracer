@@ -27,6 +27,7 @@
   "photos_per_version": 2,
   "photo_format": "jpeg",
   "photo_bytes": 16384,
+  "image_mode": "metadata",
   "hot_percent": 0,
   "companies": 3,
   "customers": 6,
