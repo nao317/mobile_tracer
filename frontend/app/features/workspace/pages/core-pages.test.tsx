@@ -64,6 +64,12 @@ describe("separate core workspace pages", () => {
     expect(screen.queryByRole("heading", { name: "Participants" })).not.toBeInTheDocument();
   });
 
+  it("links a case awaiting the customer's start approval to the casework screen", () => {
+    const snapshot = createPreviewData(), item = { ...snapshot.cases[0], status: "awaiting_customer" as const };
+    show(<CaseScreen item={item} />, snapshot, `/app/cases/${item.id}`, "live");
+    expect(screen.getByRole("link", { name: "開始条件・承認を開く" })).toHaveAttribute("href", `/casework/${item.id}/start`);
+  });
+
   it("retains stage, assignment, cancellation and completion actions on management", () => {
     const snapshot = createPreviewData(), item = snapshot.cases[0];
     show(<CaseManageScreen item={item} />, snapshot, `/preview/cases/${item.id}/manage`);

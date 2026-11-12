@@ -66,7 +66,7 @@ func (s *Service) ProcessTimestampQueue(ctx context.Context) error {
 	var job apiRegistration
 	create := false
 	e := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		e := tx.Table("integrity.api_registrations").Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).Where("status <> 'confirmed' AND updated_at < now()-interval '30 seconds' AND (provider_scope IS NULL OR provider_scope=?)", s.timestampScope).Order("updated_at").Take(&job).Error
+		e := tx.Table("integrity.api_registrations").Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).Where("status <> 'confirmed' AND (status='queued' OR updated_at < now()-interval '30 seconds') AND (provider_scope IS NULL OR provider_scope=?)", s.timestampScope).Order("updated_at").Take(&job).Error
 		if e == gorm.ErrRecordNotFound {
 			return nil
 		}
@@ -115,6 +115,10 @@ func (s *Service) ProcessTimestampQueue(ctx context.Context) error {
 		}
 		if e == nil {
 			status = t.Status
+			// init is accepted but not yet in a block; keep the ID and poll it like unconfirmed.
+			if status == "init" {
+				status = "unconfirmed"
+			}
 		}
 	}
 	// A definite rejection before an ID is returned is safe to retry. Transport,
