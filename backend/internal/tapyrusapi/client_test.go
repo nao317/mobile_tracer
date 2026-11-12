@@ -140,6 +140,23 @@ func TestTimestampAPIRejectAndMismatch(t *testing.T) {
 		t.Fatal("cancellation accepted")
 	}
 }
+func TestTimestampInitStatus(t *testing.T) {
+	hash := strings.Repeat("a", 64)
+	accepted := validTimestamp(hash)
+	accepted.Status = "init"
+	if e := Validate(accepted, hash); e != nil {
+		t.Fatal("init response rejected", e)
+	}
+	accepted.Txid = ""
+	if e := Validate(accepted, hash); !errors.Is(e, ErrUncertain) {
+		t.Fatal("init response without txid accepted", e)
+	}
+	unknown := validTimestamp(hash)
+	unknown.Status = "pending"
+	if e := Validate(unknown, hash); !errors.Is(e, ErrUncertain) {
+		t.Fatal("unknown status accepted", e)
+	}
+}
 func TestTimestampNoCredentialRedirect(t *testing.T) {
 	redirected := false
 	client, _ := apiTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

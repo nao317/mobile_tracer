@@ -79,7 +79,8 @@ func Validate(t Timestamp, hash string) error {
 	if t.ContentHash != hash || t.Prefix != Prefix || t.Type != "simple" {
 		return ErrMismatch
 	}
-	if t.ID <= 0 || !validHash(t.Txid) || (t.Status != "confirmed" && t.Status != "unconfirmed") {
+	// The published TimestampResponse status is init, unconfirmed or confirmed.
+	if t.ID <= 0 || !validHash(t.Txid) || (t.Status != "confirmed" && t.Status != "unconfirmed" && t.Status != "init") {
 		return ErrUncertain
 	}
 	if t.Status == "confirmed" && (t.BlockHeight == nil || t.BlockTime == nil) {
